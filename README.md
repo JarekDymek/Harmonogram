@@ -15,6 +15,21 @@ solvera ani reguł krytycznych.
 > wymaga profilu `VERIFIED` z kompletnym śladem zatwierdzenia i zakresem
 > obowiązywania obejmującym cały cykl.
 
+## Gotowe wersje
+
+- **PWA:** <https://jarekdymek.github.io/Harmonogram/> — instalowana z
+  przeglądarki na komputerze lub telefonie;
+- **Windows:** [najnowszy instalator
+  `Harmonogram-MOW-Setup.exe`](https://github.com/JarekDymek/Harmonogram/releases/latest).
+
+Instalator Windows zawiera frontend, backend FastAPI, solver OR-Tools i własne
+okno aplikacji. Na komputerze użytkownika nie są wymagane Python ani Node.js.
+
+PWA przechowuje interfejs i konfigurację lokalnie, ale celowo nie buforuje
+wyników API ani logiki solvera. Do generowania potrzebuje publicznego backendu
+HTTPS. Adres backendu można wpisać na ekranie startowym; pozostawienie pustego
+pola oznacza API dostępne pod tym samym adresem.
+
 ## Najważniejsze funkcje
 
 - jedna grupa i dokładnie trzech aktywnych wychowawców;
@@ -48,6 +63,40 @@ użyć odpowiednio `python3`, `source backend/.venv/bin/activate` oraz ścieżki
 `backend/.venv/bin/python`.
 
 ## Instalacja
+
+### Instalator Windows
+
+1. Otwórz stronę [Releases](https://github.com/JarekDymek/Harmonogram/releases).
+2. Pobierz `Harmonogram-MOW-Setup.exe`.
+3. Uruchom instalator i opcjonalnie zaznacz utworzenie ikony na pulpicie.
+4. Uruchom **Harmonogram MOW** z menu Start.
+
+Windows może wyświetlić ostrzeżenie SmartScreen, ponieważ pierwsze wydania nie
+są podpisane komercyjnym certyfikatem. Plik jest budowany automatycznie z kodu
+tego repozytorium przez GitHub Actions. Każde wydanie zawiera
+`SHA256SUMS.txt` do kontroli integralności. Aplikacja używa systemowego
+Microsoft Edge WebView2.
+
+### PWA z GitHub Pages
+
+1. Otwórz <https://jarekdymek.github.io/Harmonogram/>.
+2. W Chrome lub Edge wybierz ikonę instalacji w pasku adresu albo przycisk
+   **Zainstaluj aplikację**.
+3. Na ekranie startowym wpisz publiczny adres backendu HTTPS i wybierz
+   **Zapisz i sprawdź**.
+
+Sam GitHub Pages nie uruchamia Pythona ani OR-Tools. Backend można wdrożyć z
+tego repozytorium przyciskiem:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/JarekDymek/Harmonogram)
+
+Blueprint `render.yaml` tworzy usługę z `Dockerfile`, kontrolą
+`/api/health` i CORS ograniczonym do `https://jarekdymek.github.io`. Po
+wdrożeniu skopiuj adres `https://...onrender.com` do ustawień PWA. Opcjonalnie
+można zapisać go jako zmienną repozytorium `PWA_API_BASE_URL`; kolejne
+wdrożenie Pages wbuduje go jako wartość domyślną.
+
+### Instalacja deweloperska
 
 W głównym katalogu projektu:
 
@@ -87,6 +136,14 @@ npm.cmd --prefix frontend run dev
 ```
 
 Vite przekazuje żądania `/api` do backendu na porcie `8000`.
+
+Backend potrafi także serwować build frontendu z `frontend/dist`. Jest to tryb
+używany przez pakiet desktopowy:
+
+```powershell
+npm.cmd --prefix frontend run build:desktop
+backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --port 8000
+```
 
 ## Dane demonstracyjne
 
@@ -153,6 +210,16 @@ Kontrola TypeScript i build produkcyjny:
 npm.cmd --prefix frontend run build
 ```
 
+Build GitHub Pages:
+
+```powershell
+npm.cmd --prefix frontend run build:pages
+```
+
+Build instalatora jest wykonywany na runnerze Windows przez workflow
+`.github/workflows/release-windows.yml`. Tag w formacie `v1.1.0` tworzy
+wydanie GitHub Release i dołącza gotowy `Harmonogram-MOW-Setup.exe`.
+
 Zestaw backendowy obejmuje poziomy `INPUT_VALIDATION`, `CALCULATOR_UNIT`,
 `RULE_VALIDATOR_UNIT`, `SOLVER_INTEGRATION` i `END_TO_END`, między innymi:
 hierarchię planów, bilanse, normalizację, zmianę czasu, odpoczynki, twarde i
@@ -179,6 +246,10 @@ zapotrzebowaniem, błąd pola pochodnego, deterministyczność i limit czasu.
 │       ├── pages/
 │       ├── state/
 │       └── test/
+├── desktop/             # launcher WebView2, PyInstaller i Inno Setup
+├── .github/workflows/   # wdrożenie PWA i budowanie instalatora
+├── Dockerfile
+├── render.yaml
 ├── docs/
 └── README.md
 ```

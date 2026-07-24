@@ -1,0 +1,93 @@
+name: Build Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install frontend dependencies
+        run: npm install --prefix frontend --no-audit --no-fund
+
+      - name: Test and build desktop frontend
+        run: |
+          npm test --prefix frontend
+          npm run build:desktop --prefix frontend
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            desktop/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt -r desktop/requirements.txt
+
+      - name: Test backend
+        run: python -m pytest backend/tests
+
+      - name: Build desktop bundle
+        run: python -m PyInstaller --noconfirm --clean desktop/HarmonogramMOW.spec
+
+      - name: Smoke-test bundled application
+        run: |
+          & ".\dist\HarmonogramMOW\HarmonogramMOW.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $env:GITHUB_REF_NAME.TrimStart("v")
+          } else {
+            "0.0.0-dev"
+          }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" "desktop\installer.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $hash = (Get-FileHash "release\Harmonogram-MOW-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Harmonogram-MOW-Setup.exe" |
+            Set-Content "release\SHA256SUMS.txt" -Encoding ascii
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Harmonogram-MOW-Setup
+          path: |
+            release/Harmonogram-MOW-Setup.exe
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            "release\Harmonogram-MOW-Setup.exe" `
+            "release\SHA256SUMS.txt" `
+            --title "Harmonogram MOW $env:GITHUB_REF_NAME" `
+            --generate-notes

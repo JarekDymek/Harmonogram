@@ -1,0 +1,14 @@
+.git
+.github
+.openai
+backend/.venv
+backend/.pytest_cache
+backend/htmlcov
+backend/tests
+frontend
+desktop
+node_modules
+**/__pycache__
+*.pyc
+*.pyo
+*.md

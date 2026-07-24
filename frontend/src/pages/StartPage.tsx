@@ -1,14 +1,52 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api, getApiBaseUrl, saveApiBaseUrl } from "../api";
 import { DemoNotice, PageHeader, StatusBadge } from "../components/UI";
 import { useAppState } from "../state/AppState";
 
 export function StartPage() {
   const navigate = useNavigate();
   const { configuration, loadDemo, startNew, busy } = useAppState();
+  const [apiUrl, setApiUrl] = useState(getApiBaseUrl);
+  const [apiStatus, setApiStatus] = useState<
+    "idle" | "checking" | "online" | "offline"
+  >("idle");
+  const [apiMessage, setApiMessage] = useState(
+    "Adres pusty oznacza backend dostępny pod tym samym adresem co aplikacja.",
+  );
 
   const begin = async (kind: "new" | "demo") => {
     const value = kind === "demo" ? await loadDemo() : await startNew();
     if (value) navigate("/konfiguracja");
+  };
+
+  const checkApi = async () => {
+    setApiStatus("checking");
+    try {
+      const normalized = saveApiBaseUrl(apiUrl);
+      setApiUrl(normalized);
+      const health = await api.health();
+      setApiStatus("online");
+      setApiMessage(
+        `Połączono z usługą ${health.service}. Ustawienie zapisano w tej przeglądarce.`,
+      );
+    } catch (caught) {
+      setApiStatus("offline");
+      setApiMessage(
+        caught instanceof Error
+          ? caught.message
+          : "Nie udało się sprawdzić połączenia z API.",
+      );
+    }
+  };
+
+  const useSameOrigin = () => {
+    saveApiBaseUrl("");
+    setApiUrl("");
+    setApiStatus("idle");
+    setApiMessage(
+      "Używany będzie backend dostępny pod tym samym adresem co aplikacja.",
+    );
   };
 
   return (
@@ -88,6 +126,61 @@ export function StartPage() {
           </div>
         </section>
       )}
+      <section className="section-block api-connection">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">POŁĄCZENIE Z GENERATOREM</span>
+            <h2>Adres backendu API</h2>
+          </div>
+          <span className={`api-status api-status--${apiStatus}`}>
+            {apiStatus === "online"
+              ? "Połączono"
+              : apiStatus === "checking"
+                ? "Sprawdzanie…"
+                : apiStatus === "offline"
+                  ? "Brak połączenia"
+                  : "Nie sprawdzono"}
+          </span>
+        </div>
+        <p>
+          Instalator Windows używa wbudowanego backendu. Wersja PWA z GitHub
+          Pages wymaga publicznego adresu HTTPS wdrożonego API.
+        </p>
+        <div className="api-connection__controls">
+          <label>
+            <span>Adres API</span>
+            <input
+              type="url"
+              inputMode="url"
+              value={apiUrl}
+              onChange={(event) => setApiUrl(event.target.value)}
+              placeholder="https://twoj-backend.onrender.com"
+              aria-describedby="api-connection-message"
+            />
+          </label>
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={apiStatus === "checking"}
+            onClick={() => void checkApi()}
+          >
+            Zapisz i sprawdź
+          </button>
+          <button
+            type="button"
+            className="button button--secondary"
+            onClick={useSameOrigin}
+          >
+            Użyj tego samego adresu
+          </button>
+        </div>
+        <small
+          id="api-connection-message"
+          className={`api-connection__message api-connection__message--${apiStatus}`}
+        >
+          {apiMessage}
+        </small>
+      </section>
       <DemoNotice />
     </>
   );

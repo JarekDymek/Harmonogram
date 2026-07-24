@@ -9,6 +9,10 @@ frontend/dist/
 frontend/coverage/
 node_modules/
 .vite/
+/build/
+/dist/
+/release/
+*.log
 .env
 .DS_Store
 Thumbs.db

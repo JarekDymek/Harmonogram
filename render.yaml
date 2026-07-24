@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: harmonogram-mow-api-jarekdymek
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: CORS_ORIGINS
+        value: https://jarekdymek.github.io

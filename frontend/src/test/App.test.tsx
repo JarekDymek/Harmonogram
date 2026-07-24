@@ -59,7 +59,7 @@ describe("główny przepływ interfejsu", () => {
     expect(fetch).toHaveBeenCalledWith(
       "/api/demo",
       expect.objectContaining({
-        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        headers: {},
       }),
     );
   });

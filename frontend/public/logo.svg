@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Harmonogram MOW</title>
+  <desc id="desc">Litera H połączona z tarczą zegara</desc>
+  <rect width="512" height="512" rx="112" fill="#13293a"/>
+  <circle cx="256" cy="256" r="158" fill="#f4f6f7"/>
+  <circle cx="256" cy="256" r="132" fill="none" stroke="#158078" stroke-width="18"/>
+  <path d="M174 158v196M338 158v196M174 256h164" fill="none" stroke="#13293a" stroke-width="42" stroke-linecap="round"/>
+  <path d="M256 256V186M256 256l52 40" fill="none" stroke="#d4a53a" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="14" fill="#d4a53a"/>
+</svg>

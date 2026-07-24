@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useState } from "react";
+import { useOnlineStatus, usePwaInstall } from "../pwa";
 import { useAppState } from "../state/AppState";
 
 const navigation = [
@@ -17,6 +18,8 @@ const navigation = [
 export function Layout() {
   const [open, setOpen] = useState(false);
   const { configuration, busy, error, clearError } = useAppState();
+  const online = useOnlineStatus();
+  const { canInstall, installed, install } = usePwaInstall();
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -50,10 +53,20 @@ export function Layout() {
         </nav>
         <div className="sidebar__footer">
           <span
-            className={`connection-dot ${busy ? "connection-dot--busy" : ""}`}
+            className={`connection-dot ${
+              busy
+                ? "connection-dot--busy"
+                : online
+                  ? ""
+                  : "connection-dot--offline"
+            }`}
             aria-hidden="true"
           />
-          {busy ? "Backend pracuje…" : "Dane zapisywane lokalnie"}
+          {busy
+            ? "Backend pracuje…"
+            : online
+              ? "Dane zapisywane lokalnie"
+              : "Offline · dane lokalne"}
         </div>
       </aside>
       <div className="app-column">
@@ -71,15 +84,31 @@ export function Layout() {
             <span className="eyebrow">AKTYWNA KONFIGURACJA</span>
             <strong>{configuration?.groupName ?? "Brak konfiguracji"}</strong>
           </div>
-          {configuration && (
-            <span
-              className={`mode-pill mode-pill--${configuration.requestedOperationMode.toLowerCase()}`}
-            >
-              {configuration.requestedOperationMode === "DEMONSTRATION"
-                ? "Tryb demonstracyjny"
-                : "Tryb produkcyjny"}
-            </span>
-          )}
+          <div className="topbar__actions">
+            {canInstall && (
+              <button
+                className="install-button"
+                type="button"
+                onClick={() => void install()}
+              >
+                Zainstaluj aplikację
+              </button>
+            )}
+            {installed && (
+              <span className="installed-pill" aria-label="Aplikacja zainstalowana">
+                Zainstalowana
+              </span>
+            )}
+            {configuration && (
+              <span
+                className={`mode-pill mode-pill--${configuration.requestedOperationMode.toLowerCase()}`}
+              >
+                {configuration.requestedOperationMode === "DEMONSTRATION"
+                  ? "Tryb demonstracyjny"
+                  : "Tryb produkcyjny"}
+              </span>
+            )}
+          </div>
         </header>
         {error && (
           <div className="global-error" role="alert">
