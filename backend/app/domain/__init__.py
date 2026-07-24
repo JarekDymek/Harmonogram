@@ -1,0 +1,1 @@
+"""Stałe i reguły domenowe."""

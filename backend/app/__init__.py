@@ -1,0 +1,1 @@
+"""Backend aplikacji Harmonogram MOW."""

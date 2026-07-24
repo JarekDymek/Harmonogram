@@ -1,0 +1,1 @@
+"""Niezależna walidacja."""
