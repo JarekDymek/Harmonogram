@@ -1,10 +1,10 @@
 # Harmonogram MOW
 
-Responsywna aplikacja webowa do generowania pełnego, kołowego,
-sześciotygodniowego harmonogramu pracy trzech wychowawców jednej grupy
-internatu Młodzieżowego Ośrodka Wychowawczego.
+Responsywna aplikacja webowa do generowania harmonogramu pracy trzech albo
+czterech wychowawców jednej grupy internatu Młodzieżowego Ośrodka
+Wychowawczego, dla horyzontu od jednego do sześciu tygodni.
 
-Backend waliduje dane, oblicza zapotrzebowanie dla 42 dat i buduje model
+Backend waliduje dane, oblicza zapotrzebowanie dla wybranego zakresu i buduje model
 ograniczeń OR-Tools CP-SAT. Znaleziony kandydat jest publikowany dopiero po
 ponownym sprawdzeniu przez niezależny walidator. Frontend nie odtwarza logiki
 solvera ani reguł krytycznych.
@@ -32,8 +32,9 @@ pola oznacza API dostępne pod tym samym adresem.
 
 ## Najważniejsze funkcje
 
-- jedna grupa i dokładnie trzech aktywnych wychowawców;
-- cykl 6 tygodni × 7 dni, rozpoczynający się w poniedziałek;
+- jedna grupa i dokładnie trzech albo czterech aktywnych wychowawców;
+- horyzont 1–6 tygodni, rozpoczynający się w poniedziałek;
+- granice w trybie skończonym albo cyklicznym (cykl tylko dla 6 tygodni);
 - półgodzinowy model czasu i odcinki o długości co najmniej 120 minut;
 - dokładnie pięć dni pracy każdej osoby w każdym tygodniu;
 - podstawowe i zatwierdzone zastępcze przydziały tygodniowe;
@@ -48,7 +49,8 @@ pola oznacza API dostępne pod tym samym adresem.
   błędu wewnętrznego i poprawnego wyniku;
 - polskie raporty zawierające stabilne `ruleId`;
 - tygodniowy i osobowy widok harmonogramu na komputerze i telefonie;
-- trwały lokalny zapis konfiguracji, wyniku i raportu w `localStorage`.
+- wersjonowany lokalny zapis konfiguracji, wyniku i raportu w `localStorage`;
+- interfejs godzinowy z obsługą polskiego przecinka i krokiem 0,5 godziny.
 
 ## Wymagania
 
@@ -178,7 +180,7 @@ solvera i wersji OR-Tools.
 | `GET` | `/api/health` | kontrola działania backendu |
 | `GET` | `/api/demo` | kompletna konfiguracja demonstracyjna |
 | `POST` | `/api/validate-input` | walidacja danych i bilansów |
-| `POST` | `/api/calculate-care` | zapotrzebowanie dla 42 dat |
+| `POST` | `/api/calculate-care` | zapotrzebowanie dla wybranego horyzontu |
 | `POST` | `/api/generate` | uruchomienie CP-SAT i niezależnej walidacji |
 | `POST` | `/api/validate-schedule` | kontrola przekazanego harmonogramu |
 
@@ -217,7 +219,7 @@ npm.cmd --prefix frontend run build:pages
 ```
 
 Build instalatora jest wykonywany na runnerze Windows przez workflow
-`.github/workflows/release-windows.yml`. Tag w formacie `v1.1.0` tworzy
+`.github/workflows/release-windows.yml`. Tag w formacie `v1.2.0` tworzy
 wydanie GitHub Release i dołącza gotowy `Harmonogram-MOW-Setup.exe`.
 
 Zestaw backendowy obejmuje poziomy `INPUT_VALIDATION`, `CALCULATOR_UNIT`,

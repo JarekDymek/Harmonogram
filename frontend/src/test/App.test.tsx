@@ -25,7 +25,7 @@ describe("główny przepływ interfejsu", () => {
     renderApp();
     expect(
       screen.getByRole("heading", {
-        name: /Sześć tygodni\. Trzy osoby\. Bez zgadywania\./i,
+        name: /Od jednego do sześciu tygodni\. Trzy albo cztery osoby\./i,
       }),
     ).toBeInTheDocument();
     expect(
@@ -34,7 +34,9 @@ describe("główny przepływ interfejsu", () => {
     expect(
       screen.getByRole("button", { name: "Otwórz demonstrację" }),
     ).toBeEnabled();
-    expect(screen.getByText("Wyłącznie tryb demonstracyjny")).toBeVisible();
+    expect(
+      screen.queryByText("Wyłącznie tryb demonstracyjny"),
+    ).not.toBeInTheDocument();
   });
 
   it("wczytuje demonstrację przez API i przechodzi do konfiguracji", async () => {
@@ -66,7 +68,7 @@ describe("główny przepływ interfejsu", () => {
 
   it("waliduje formularz podstawowy przez Zod i React Hook Form", async () => {
     localStorage.setItem(
-      "harmonogram-mow-configuration-v1",
+      "harmonogram-mow-configuration-v2",
       JSON.stringify(configurationFixture),
     );
     const user = userEvent.setup();
@@ -77,5 +79,94 @@ describe("główny przepływ interfejsu", () => {
       screen.getByRole("button", { name: "Zapisz konfigurację" }),
     );
     expect(await screen.findByText("Podaj nazwę grupy.")).toBeVisible();
+  });
+
+  it("pozwala jawnie przełączyć zespół z trzech na cztery osoby", async () => {
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v2",
+      JSON.stringify(configurationFixture),
+    );
+    const user = userEvent.setup();
+    renderApp("/konfiguracja");
+    await user.selectOptions(screen.getByLabelText("Liczba wychowawców"), "4");
+    await user.click(
+      screen.getByRole("button", { name: "Zapisz konfigurację" }),
+    );
+    await user.click(screen.getByRole("link", { name: /Wychowawcy/ }));
+    expect(
+      await screen.findByRole("heading", { name: "4 wychowawców" }),
+    ).toBeVisible();
+    expect(screen.getByText("Wychowawca D")).toBeVisible();
+  });
+
+  it("udostępnia cykl tylko dla horyzontu sześciotygodniowego", async () => {
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v2",
+      JSON.stringify(configurationFixture),
+    );
+    const user = userEvent.setup();
+    renderApp("/konfiguracja");
+    const boundary = screen.getByLabelText("Granice harmonogramu");
+    expect(
+      screen.getByRole("option", {
+        name: "Cykl powtarzalny (tylko 6 tygodni)",
+      }),
+    ).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText("Horyzont planowania"), "6");
+    expect(
+      screen.getByRole("option", {
+        name: "Cykl powtarzalny (tylko 6 tygodni)",
+      }),
+    ).toBeEnabled();
+    await user.selectOptions(boundary, "CYCLIC");
+    await user.click(
+      screen.getByRole("button", { name: "Zapisz konfigurację" }),
+    );
+    expect(boundary).toHaveValue("CYCLIC");
+  });
+
+  it("pokazuje przydziały wyłącznie jako godziny", () => {
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v2",
+      JSON.stringify(configurationFixture),
+    );
+    renderApp("/wychowawcy");
+    expect(
+      screen.getAllByLabelText(/^Godziny tygodniowo/),
+    ).toHaveLength(3);
+    expect(screen.getAllByDisplayValue("27,5")).toHaveLength(2);
+    expect(screen.queryByText("Minuty tygodniowo")).not.toBeInTheDocument();
+  });
+
+  it("wymaga pełnego śladu przed zapisaniem statusu VERIFIED", async () => {
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v2",
+      JSON.stringify(configurationFixture),
+    );
+    const user = userEvent.setup();
+    renderApp("/reguly");
+    await user.selectOptions(
+      screen.getByLabelText("Status weryfikacji"),
+      "VERIFIED",
+    );
+    await user.click(screen.getByRole("button", { name: "Zapisz reguły" }));
+    expect(
+      await screen.findByText("Podaj datę i czas weryfikacji."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Podaj datę początku obowiązywania."),
+    ).toBeVisible();
+    expect(screen.getByText("Podaj osobę zatwierdzającą.")).toBeVisible();
+  });
+
+  it("nie wymaga parametrów wyłączonego wyjątku i kompensacji", () => {
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v2",
+      JSON.stringify(configurationFixture),
+    );
+    renderApp("/reguly");
+    expect(screen.getByLabelText("Minimum wyjątku")).toBeDisabled();
+    expect(screen.getByLabelText("Wymiar kompensacji")).toBeDisabled();
+    expect(screen.getByLabelText("Termin kompensacji")).toBeDisabled();
   });
 });

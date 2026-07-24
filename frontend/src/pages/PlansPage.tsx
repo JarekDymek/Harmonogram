@@ -283,7 +283,7 @@ export function PlansPage() {
             <input
               type="number"
               min="1"
-              max="6"
+              max={configuration.planningHorizonWeeks}
               {...exceptionForm.register("weekNumber", { valueAsNumber: true })}
             />
           </label>

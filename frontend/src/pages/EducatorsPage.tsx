@@ -1,10 +1,28 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { EmptyState, PageHeader, formatMinutes } from "../components/UI";
 import { useAppState } from "../state/AppState";
 import type { AssignmentOverride, Unavailability } from "../types";
+import {
+  formatPolishHours,
+  hoursToMinutes,
+  minutesToHours,
+  parsePolishHours,
+} from "../time";
+
+const hoursField = z.string().refine(
+  (value) => {
+    try {
+      parsePolishHours(value);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  "Podaj godziny w krokach co 0,5, np. 27,5.",
+);
 
 const educatorSchema = z.object({
   educators: z
@@ -12,23 +30,32 @@ const educatorSchema = z.object({
       z.object({
         displayName: z.string().min(2, "Podaj nazwę."),
         shortCode: z.string().min(1).max(5),
-        baseWeeklyAssignedMinutes: z
-          .number()
-          .int()
-          .nonnegative()
-          .multipleOf(30, "Wymagana wielokrotność 30 minut."),
+        baseWeeklyAssignedHours: hoursField,
         description: z.string(),
       }),
     )
-    .length(3),
+    .min(3)
+    .max(4),
 });
 type EducatorValues = z.infer<typeof educatorSchema>;
 
 export function EducatorsPage() {
   const { configuration, setConfiguration } = useAppState();
+  const [boundaryRows, setBoundaryRows] = useState<
+    Array<{
+      educatorId: string;
+      previousDate: string;
+      previousStart: string;
+      previousEnd: string;
+      nextDate: string;
+      nextStart: string;
+      nextEnd: string;
+    }>
+  >([]);
   const {
     register,
     reset,
+    setValue,
     handleSubmit,
     formState: { errors },
   } = useForm<EducatorValues>({
@@ -37,7 +64,7 @@ export function EducatorsPage() {
   const overrideForm = useForm<{
     educatorId: string;
     weekNumber: number;
-    assignedMinutes: number;
+    assignedHours: string;
     reason: string;
   }>();
   const unavailableForm = useForm<{
@@ -58,14 +85,16 @@ export function EducatorsPage() {
         educators: configuration.educators.map((item) => ({
           displayName: item.displayName,
           shortCode: item.shortCode,
-          baseWeeklyAssignedMinutes: item.baseWeeklyAssignedMinutes,
+          baseWeeklyAssignedHours: formatPolishHours(
+            minutesToHours(item.baseWeeklyAssignedMinutes),
+          ),
           description: item.description,
         })),
       });
       overrideForm.reset({
         educatorId: configuration.educators[0]?.id,
         weekNumber: 1,
-        assignedMinutes: 0,
+        assignedHours: "0",
         reason: "",
       });
       unavailableForm.reset({
@@ -79,6 +108,32 @@ export function EducatorsPage() {
         endTime: "10:00",
         description: "",
       });
+      const contexts = new Map(
+        (configuration.boundaryContext?.educators ?? []).map((item) => [
+          item.educatorId,
+          item,
+        ]),
+      );
+      setBoundaryRows(
+        configuration.educators.map((educator) => {
+          const context = contexts.get(educator.id);
+          const previous = context?.lastAssignmentBefore;
+          const next = context?.firstAssignmentAfter;
+          return {
+            educatorId: educator.id,
+            previousDate: previous?.date ?? "",
+            previousStart:
+              previous ? `${String(Math.floor(previous.startMinute / 60)).padStart(2, "0")}:${String(previous.startMinute % 60).padStart(2, "0")}` : "",
+            previousEnd:
+              previous ? `${String(Math.floor(previous.endMinute / 60)).padStart(2, "0")}:${String(previous.endMinute % 60).padStart(2, "0")}` : "",
+            nextDate: next?.date ?? "",
+            nextStart:
+              next ? `${String(Math.floor(next.startMinute / 60)).padStart(2, "0")}:${String(next.startMinute % 60).padStart(2, "0")}` : "",
+            nextEnd:
+              next ? `${String(Math.floor(next.endMinute / 60)).padStart(2, "0")}:${String(next.endMinute % 60).padStart(2, "0")}` : "",
+          };
+        }),
+      );
     }
   }, [configuration, reset, overrideForm, unavailableForm]);
 
@@ -89,18 +144,37 @@ export function EducatorsPage() {
       ...configuration,
       educators: configuration.educators.map((item, index) => ({
         ...item,
-        ...values.educators[index],
+        displayName: values.educators[index].displayName,
+        shortCode: values.educators[index].shortCode,
+        description: values.educators[index].description,
+        baseWeeklyAssignedMinutes: hoursToMinutes(
+          parsePolishHours(values.educators[index].baseWeeklyAssignedHours),
+        ),
       })),
     });
   };
 
   const addOverride = overrideForm.handleSubmit((values) => {
+    let assignedMinutes: number;
+    try {
+      assignedMinutes = hoursToMinutes(
+        parsePolishHours(values.assignedHours),
+      );
+    } catch (caught) {
+      overrideForm.setError("assignedHours", {
+        message:
+          caught instanceof Error
+            ? caught.message
+            : "Niepoprawna liczba godzin.",
+      });
+      return;
+    }
     const item: AssignmentOverride = {
       id: crypto.randomUUID(),
       configurationVersionId: configuration.configurationVersionId,
       educatorId: values.educatorId,
       weekNumber: Number(values.weekNumber),
-      assignedMinutes: Number(values.assignedMinutes),
+      assignedMinutes,
       reason: values.reason,
       approvedAt: new Date().toISOString(),
       approvedBy: "UŻYTKOWNIK",
@@ -138,11 +212,66 @@ export function EducatorsPage() {
     });
   });
 
+  const setBoundaryField = (
+    educatorId: string,
+    field: keyof (typeof boundaryRows)[number],
+    value: string,
+  ) => {
+    setBoundaryRows((current) =>
+      current.map((row) =>
+        row.educatorId === educatorId ? { ...row, [field]: value } : row,
+      ),
+    );
+  };
+
+  const timeToMinute = (value: string) => {
+    const [hours, minutes] = value.split(":").map(Number);
+    return hours * 60 + minutes;
+  };
+
+  const saveBoundaryContext = () => {
+    const incomplete = boundaryRows.some(
+      (row) =>
+        (row.previousDate &&
+          (!row.previousStart || !row.previousEnd)) ||
+        (row.nextDate && (!row.nextStart || !row.nextEnd)),
+    );
+    if (incomplete) {
+      window.alert(
+        "Dla każdej podanej daty granicznej uzupełnij godzinę początku i końca.",
+      );
+      return;
+    }
+    const educators = boundaryRows
+      .filter((row) => row.previousDate || row.nextDate)
+      .map((row) => ({
+        educatorId: row.educatorId,
+        lastAssignmentBefore: row.previousDate
+          ? {
+              date: row.previousDate,
+              startMinute: timeToMinute(row.previousStart),
+              endMinute: timeToMinute(row.previousEnd),
+            }
+          : null,
+        firstAssignmentAfter: row.nextDate
+          ? {
+              date: row.nextDate,
+              startMinute: timeToMinute(row.nextStart),
+              endMinute: timeToMinute(row.nextEnd),
+            }
+          : null,
+      }));
+    setConfiguration({
+      ...configuration,
+      boundaryContext: educators.length ? { educators } : null,
+    });
+  };
+
   return (
     <>
       <PageHeader
         eyebrow="KROK 03 · ZESPÓŁ"
-        title="Dokładnie trzech wychowawców"
+        title={`${configuration.educatorCount} wychowawców`}
         description="Podstawowe przydziały są źródłem prawdy. Wyjątek tygodniowy zawsze wymaga jawnego rekordu."
       />
       <form className="stack" onSubmit={handleSubmit(saveEducators)}>
@@ -166,20 +295,35 @@ export function EducatorsPage() {
                 <input {...register(`educators.${index}.shortCode`)} />
               </label>
               <label>
-                Minuty tygodniowo
+                Godziny tygodniowo
                 <input
-                  type="number"
-                  step="30"
-                  {...register(
-                    `educators.${index}.baseWeeklyAssignedMinutes`,
-                    { valueAsNumber: true },
-                  )}
+                  type="text"
+                  inputMode="decimal"
+                  step="0.5"
+                  {...register(`educators.${index}.baseWeeklyAssignedHours`)}
+                  onBlur={(event) => {
+                    try {
+                      setValue(
+                        `educators.${index}.baseWeeklyAssignedHours`,
+                        formatPolishHours(
+                          parsePolishHours(event.currentTarget.value),
+                        ),
+                        { shouldValidate: true },
+                      );
+                    } catch {
+                      // Komunikat walidacji pojawi się pod polem.
+                    }
+                  }}
                 />
-                <small>
-                  {formatMinutes(
-                    configuration.educators[index].baseWeeklyAssignedMinutes,
-                  )}
-                </small>
+                <small>Wpisz np. 27,5. Krok: 0,5 godziny.</small>
+                {errors.educators?.[index]?.baseWeeklyAssignedHours && (
+                  <em>
+                    {
+                      errors.educators[index]?.baseWeeklyAssignedHours
+                        ?.message
+                    }
+                  </em>
+                )}
               </label>
               <label>
                 Opis
@@ -218,19 +362,37 @@ export function EducatorsPage() {
             <input
               type="number"
               min="1"
-              max="6"
+              max={configuration.planningHorizonWeeks}
               {...overrideForm.register("weekNumber", { valueAsNumber: true })}
             />
           </label>
           <label>
-            Minuty
+            Godziny
             <input
-              type="number"
-              step="30"
-              {...overrideForm.register("assignedMinutes", {
-                valueAsNumber: true,
-              })}
+              type="text"
+              inputMode="decimal"
+              step="0.5"
+              required
+              {...overrideForm.register("assignedHours")}
+              onBlur={(event) => {
+                try {
+                  overrideForm.setValue(
+                    "assignedHours",
+                    formatPolishHours(
+                      parsePolishHours(event.currentTarget.value),
+                    ),
+                  );
+                } catch {
+                  // Pole zostanie odrzucone podczas zapisu.
+                }
+              }}
             />
+            <small>Przykład: 27,5 godz.</small>
+            {overrideForm.formState.errors.assignedHours && (
+              <em>
+                {overrideForm.formState.errors.assignedHours.message}
+              </em>
+            )}
           </label>
           <label className="inline-form__wide">
             Powód i zatwierdzenie
@@ -314,7 +476,7 @@ export function EducatorsPage() {
             <input
               type="number"
               min="1"
-              max="6"
+              max={configuration.planningHorizonWeeks}
               {...unavailableForm.register("weekNumber", {
                 valueAsNumber: true,
               })}
@@ -379,6 +541,111 @@ export function EducatorsPage() {
                       ×
                     </button>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="section-block">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">KONTEKST GRANICZNY</span>
+            <h2>Praca przed i po horyzoncie</h2>
+          </div>
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={saveBoundaryContext}
+          >
+            Zapisz kontekst
+          </button>
+        </div>
+        <p className="muted">
+          Opcjonalne dane zwiększają zakres kontroli odpoczynku w trybie
+          skończonym. Pozostaw cały wiersz pusty, jeśli przydział nie jest
+          znany.
+        </p>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Osoba</th>
+                <th>Poprzednia data</th>
+                <th>Od</th>
+                <th>Do</th>
+                <th>Następna data</th>
+                <th>Od</th>
+                <th>Do</th>
+              </tr>
+            </thead>
+            <tbody>
+              {boundaryRows.map((row) => (
+                <tr key={row.educatorId}>
+                  <td>{row.educatorId}</td>
+                  <td>
+                    <input
+                      type="date"
+                      value={row.previousDate}
+                      onChange={(event) =>
+                        setBoundaryField(
+                          row.educatorId,
+                          "previousDate",
+                          event.target.value,
+                        )
+                      }
+                    />
+                  </td>
+                  {(["previousStart", "previousEnd"] as const).map(
+                    (field) => (
+                      <td key={field}>
+                        <input
+                          type="time"
+                          step="1800"
+                          required={Boolean(row.previousDate)}
+                          value={row[field]}
+                          onChange={(event) =>
+                            setBoundaryField(
+                              row.educatorId,
+                              field,
+                              event.target.value,
+                            )
+                          }
+                        />
+                      </td>
+                    ),
+                  )}
+                  <td>
+                    <input
+                      type="date"
+                      value={row.nextDate}
+                      onChange={(event) =>
+                        setBoundaryField(
+                          row.educatorId,
+                          "nextDate",
+                          event.target.value,
+                        )
+                      }
+                    />
+                  </td>
+                  {(["nextStart", "nextEnd"] as const).map((field) => (
+                    <td key={field}>
+                      <input
+                        type="time"
+                        step="1800"
+                        required={Boolean(row.nextDate)}
+                        value={row[field]}
+                        onChange={(event) =>
+                          setBoundaryField(
+                            row.educatorId,
+                            field,
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

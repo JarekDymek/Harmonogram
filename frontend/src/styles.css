@@ -891,7 +891,7 @@ input[readonly] {
 
 .educator-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 16px;
 }
 
@@ -932,6 +932,14 @@ input[readonly] {
   border-color: #d8ba73;
   background: #fff2d2;
   color: #70530f;
+}
+
+.avatar--4,
+.avatar--d,
+.shift--d {
+  border-color: #c5a8cf;
+  background: #f4e9f7;
+  color: #70447e;
 }
 
 .person-card__title {
@@ -1543,6 +1551,11 @@ input[readonly] {
 .shift--c {
   border-color: #dcc280;
   border-left-color: #b58a25;
+}
+
+.shift--d {
+  border-color: #cdb4d6;
+  border-left-color: #8d5a9d;
 }
 
 .segmented-control {

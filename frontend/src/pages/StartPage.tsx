@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, getApiBaseUrl, saveApiBaseUrl } from "../api";
-import { DemoNotice, PageHeader, StatusBadge } from "../components/UI";
+import { PageHeader, StatusBadge } from "../components/UI";
 import { useAppState } from "../state/AppState";
 
 export function StartPage() {
@@ -53,7 +53,7 @@ export function StartPage() {
     <>
       <PageHeader
         eyebrow="GENERATOR HARMONOGRAMU"
-        title="Sześć tygodni. Trzy osoby. Bez zgadywania."
+        title="Od jednego do sześciu tygodni. Trzy albo cztery osoby."
         description="Skonfiguruj zapotrzebowanie, zatwierdzone weekendy i ograniczenia. Aplikacja wygeneruje wyłącznie harmonogram zgodny ze wszystkimi regułami krytycznymi."
       />
       <section className="hero-grid">
@@ -77,8 +77,8 @@ export function StartPage() {
           <span className="card-number">02</span>
           <h2>Dane demonstracyjne</h2>
           <p>
-            Wczytaj wykonalny cykl A–B–C z sześcioma weekendami, dniem
-            specjalnym i jawnym profilem testowym.
+            Wczytaj wykonalny, tygodniowy harmonogram A–B–C w trybie
+            skończonym, z jawnym profilem testowym.
           </p>
           <button
             className="button button--secondary"
@@ -117,7 +117,13 @@ export function StartPage() {
             </div>
             <div className="metric">
               <small>Wychowawcy</small>
-              <strong>{configuration.educators.length} / 3</strong>
+              <strong>{configuration.educators.length}</strong>
+            </div>
+            <div className="metric">
+              <small>Horyzont</small>
+              <strong>
+                {configuration.planningHorizonWeeks} tyg.
+              </strong>
             </div>
             <div className="metric">
               <small>Profil prawny</small>
@@ -181,7 +187,6 @@ export function StartPage() {
           {apiMessage}
         </small>
       </section>
-      <DemoNotice />
     </>
   );
 }

@@ -19,7 +19,7 @@ describe("komponenty raportowe", () => {
       />,
     );
     const row = screen.getByRole("row", { name: /REQ-HOURS-001/ });
-    expect(within(row).getByText("4920 / 4950")).toBeVisible();
+    expect(within(row).getByText("82 godz. / 82,5 godz.")).toBeVisible();
     expect(within(row).getByText("ERROR")).toBeVisible();
   });
 

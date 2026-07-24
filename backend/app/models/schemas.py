@@ -54,6 +54,11 @@ class OperationMode(StrEnum):
     DEMONSTRATION = "DEMONSTRATION"
 
 
+class ScheduleBoundaryMode(StrEnum):
+    FINITE = "FINITE"
+    CYCLIC = "CYCLIC"
+
+
 class WeeklyRestWindowType(StrEnum):
     FIXED_LOCAL_WEEK = "FIXED_LOCAL_WEEK"
     ROLLING_DURATION = "ROLLING_DURATION"
@@ -256,7 +261,7 @@ class WeekendRotationVariant(APIModel):
     applicable_week_number: int | None = Field(default=None, ge=1, le=6)
     applicable_saturday_date: Date | None = None
     applicable_sunday_date: Date | None = None
-    off_educator_id: str
+    off_educator_id: str | None = None
     approved: bool
     approval_reference: str
     approved_at: datetime
@@ -265,7 +270,24 @@ class WeekendRotationVariant(APIModel):
     sunday_template: WeekendDayTemplate
 
 
+class BoundaryWorkSegment(APIModel):
+    date: Date
+    start_minute: int = Field(ge=0, lt=1440)
+    end_minute: int = Field(gt=0, le=1440)
+
+
+class EducatorBoundaryContext(APIModel):
+    educator_id: str
+    last_assignment_before: BoundaryWorkSegment | None = None
+    first_assignment_after: BoundaryWorkSegment | None = None
+
+
+class BoundaryContext(APIModel):
+    educators: list[EducatorBoundaryContext] = Field(default_factory=list)
+
+
 class ScheduleConfiguration(APIModel):
+    schema_version: int = Field(default=2, ge=2)
     project_id: str
     project_name: str
     configuration_version_id: str
@@ -275,8 +297,12 @@ class ScheduleConfiguration(APIModel):
     cycle_start_date: Date
     week_start_day: str = "MONDAY"
     time_zone_id: str = "Europe/Warsaw"
-    cycle_length_weeks: int = 6
-    cycle_is_repeating: bool = True
+    educator_count: int = Field(default=3, ge=3, le=4)
+    planning_horizon_weeks: int = Field(default=1, ge=1, le=6)
+    schedule_boundary_mode: ScheduleBoundaryMode = ScheduleBoundaryMode.FINITE
+    # Pola starszego schematu są przyjmowane wyłącznie dla zgodności migracyjnej.
+    cycle_length_weeks: int | None = Field(default=None, ge=1, le=6)
+    cycle_is_repeating: bool | None = None
     starting_weekend_variant: int = Field(default=1, ge=1, le=6)
     requested_operation_mode: OperationMode
     educators: list[Educator]
@@ -286,6 +312,7 @@ class ScheduleConfiguration(APIModel):
     legal_rules: LegalRulesConfiguration
     organizational_rules: OrganizationalRulesConfiguration
     weekend_variants: list[WeekendRotationVariant]
+    boundary_context: BoundaryContext | None = None
     solver_time_limit_seconds: float = Field(default=20.0, gt=0, le=300)
     random_seed: int = 20260724
     demonstration_notice: str | None = None
@@ -377,6 +404,7 @@ class GenerateResponse(APIModel):
     validation_report: ValidationReport | None = None
     conflict_report: ConflictReport | None = None
     messages: list[DomainMessage] = Field(default_factory=list)
+    next_weekend_variant: int | None = Field(default=None, ge=1, le=6)
 
 
 class ValidateScheduleRequest(APIModel):

@@ -14,9 +14,10 @@ import type {
   ScheduleConfiguration,
 } from "../types";
 
-const STORAGE_KEY = "harmonogram-mow-configuration-v1";
-const INPUT_REPORT_KEY = "harmonogram-mow-input-report-v1";
-const GENERATION_KEY = "harmonogram-mow-generation-v1";
+const STORAGE_KEY = "harmonogram-mow-configuration-v2";
+const INPUT_REPORT_KEY = "harmonogram-mow-input-report-v2";
+const GENERATION_KEY = "harmonogram-mow-generation-v2";
+const LEGACY_STORAGE_KEY = "harmonogram-mow-configuration-v1";
 
 interface AppStateValue {
   configuration: ScheduleConfiguration | null;
@@ -24,6 +25,7 @@ interface AppStateValue {
   generation: GenerateResponse | null;
   busy: boolean;
   error: string | null;
+  migrationPending: boolean;
   setConfiguration: (value: ScheduleConfiguration) => void;
   clearError: () => void;
   loadDemo: () => Promise<ScheduleConfiguration>;
@@ -43,27 +45,75 @@ function restore<T>(key: string): T | null {
   }
 }
 
+export function migrateConfiguration(
+  source: Partial<ScheduleConfiguration>,
+): ScheduleConfiguration {
+  const copy = JSON.parse(
+    JSON.stringify(source),
+  ) as Partial<ScheduleConfiguration>;
+  if ((copy.schemaVersion ?? 0) >= 2) {
+    return copy as ScheduleConfiguration;
+  }
+  const legacyWeeks =
+    typeof copy.cycleLengthWeeks === "number" ? copy.cycleLengthWeeks : 6;
+  const planningHorizonWeeks = Math.min(6, Math.max(1, legacyWeeks));
+  const educatorCount = copy.educators?.length === 4 ? 4 : 3;
+  return {
+    ...(copy as ScheduleConfiguration),
+    schemaVersion: 2,
+    educatorCount,
+    planningHorizonWeeks,
+    scheduleBoundaryMode:
+      copy.cycleIsRepeating === true && planningHorizonWeeks === 6
+        ? "CYCLIC"
+        : "FINITE",
+  };
+}
+
+function restoreInitialConfiguration(): {
+  configuration: ScheduleConfiguration | null;
+  migrationPending: boolean;
+} {
+  const current = restore<ScheduleConfiguration>(STORAGE_KEY);
+  if (current) {
+    return {
+      configuration: migrateConfiguration(current),
+      migrationPending: (current.schemaVersion ?? 0) < 2,
+    };
+  }
+  const legacy = restore<Partial<ScheduleConfiguration>>(
+    LEGACY_STORAGE_KEY,
+  );
+  return legacy
+    ? { configuration: migrateConfiguration(legacy), migrationPending: true }
+    : { configuration: null, migrationPending: false };
+}
+
 export function AppStateProvider({ children }: { children: ReactNode }) {
+  const [initial] = useState(restoreInitialConfiguration);
   const [configuration, setConfigurationState] =
-    useState<ScheduleConfiguration | null>(() =>
-      restore<ScheduleConfiguration>(STORAGE_KEY),
-    );
+    useState<ScheduleConfiguration | null>(initial.configuration);
+  const [migrationPending, setMigrationPending] = useState(
+    initial.migrationPending,
+  );
   const [inputReport, setInputReport] = useState<InputReport | null>(() =>
-    restore<InputReport>(INPUT_REPORT_KEY),
+    initial.migrationPending ? null : restore<InputReport>(INPUT_REPORT_KEY),
   );
   const [generation, setGeneration] = useState<GenerateResponse | null>(() =>
-    restore<GenerateResponse>(GENERATION_KEY),
+    initial.migrationPending ? null : restore<GenerateResponse>(GENERATION_KEY),
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (migrationPending) return;
     if (configuration) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(configuration));
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
-  }, [configuration]);
+  }, [configuration, migrationPending]);
 
   useEffect(() => {
     if (inputReport) {
@@ -83,6 +133,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const setConfiguration = useCallback((value: ScheduleConfiguration) => {
     setConfigurationState(value);
+    setMigrationPending(false);
     setInputReport(null);
     setGeneration(null);
     setError(null);
@@ -177,6 +228,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       generation,
       busy,
       error,
+      migrationPending,
       setConfiguration,
       clearError: () => setError(null),
       loadDemo,
@@ -190,6 +242,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       generation,
       busy,
       error,
+      migrationPending,
       setConfiguration,
       loadDemo,
       startNew,

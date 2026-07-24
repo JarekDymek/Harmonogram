@@ -20,6 +20,7 @@ export function SummaryPage() {
     generate,
   } = useAppState();
   if (!configuration) return <EmptyState>Najpierw utwórz konfigurację.</EmptyState>;
+  const expectedDates = configuration.planningHorizonWeeks * 7;
 
   const runGeneration = async () => {
     const result = await generate();
@@ -63,7 +64,10 @@ export function SummaryPage() {
         <section className="empty-state empty-state--compact">
           <span aria-hidden="true">↻</span>
           <h2>Dane nie zostały jeszcze sprawdzone</h2>
-          <p>Uruchom walidację, aby zobaczyć bilanse i zapotrzebowanie 42 dat.</p>
+          <p>
+            Uruchom walidację, aby zobaczyć bilanse i zapotrzebowanie dla
+            {` ${expectedDates} dat`}.
+          </p>
         </section>
       ) : (
         <>
@@ -74,7 +78,7 @@ export function SummaryPage() {
             </div>
             <div>
               <small>Daty z planem</small>
-              <strong>{inputReport.care.length} / 42</strong>
+              <strong>{inputReport.care.length} / {expectedDates}</strong>
             </div>
             <div>
               <small>Błędy</small>
@@ -96,8 +100,8 @@ export function SummaryPage() {
           <section className="section-block">
             <div className="section-heading">
               <div>
-                <span className="eyebrow">BILANS MINUT</span>
-                <h2>Sześć tygodni</h2>
+                <span className="eyebrow">BILANS GODZIN</span>
+                <h2>{configuration.planningHorizonWeeks} tyg.</h2>
               </div>
             </div>
             <div className="balance-grid">
@@ -110,7 +114,7 @@ export function SummaryPage() {
                     <span>Tydzień {item.weekNumber}</span>
                     <strong>
                       {item.differenceMinutes > 0 ? "+" : ""}
-                      {item.differenceMinutes} min
+                      {formatMinutes(item.differenceMinutes)}
                     </strong>
                   </header>
                   <dl>
@@ -134,7 +138,7 @@ export function SummaryPage() {
             <div className="section-heading">
               <div>
                 <span className="eyebrow">ZAPOTRZEBOWANIE</span>
-                <h2>42 daty</h2>
+                <h2>{expectedDates} dat</h2>
               </div>
             </div>
             <div className="care-list">

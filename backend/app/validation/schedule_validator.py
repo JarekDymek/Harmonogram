@@ -13,6 +13,7 @@ from app.models.schemas import (
     PlanScope,
     PublicResult,
     ScheduleConfiguration,
+    ScheduleBoundaryMode,
     UnavailabilityScope,
     UnavailabilityType,
     ValidationReport,
@@ -77,7 +78,7 @@ def calculate_care_independently(
     """Celowo nie korzysta z kalkulatora używanego przed solverem."""
     step = configuration.organizational_rules.time_step_minutes
     result: list[CalculatedCareDay] = []
-    for day_index in range(rules.CYCLE_DAYS):
+    for day_index in range(configuration.planning_horizon_weeks * 7):
         target_date = configuration.cycle_start_date + timedelta(days=day_index)
         week_number = day_index // 7 + 1
         plan = _select_plan_independently(
@@ -163,7 +164,8 @@ def _assignment_shape_messages(
     step = configuration.organizational_rules.time_step_minutes
     minimum = configuration.organizational_rules.minimum_segment_minutes
     educator_ids = {item.id for item in configuration.educators if item.active}
-    cycle_end = configuration.cycle_start_date + timedelta(days=rules.CYCLE_DAYS)
+    horizon_days = configuration.planning_horizon_weeks * 7
+    cycle_end = configuration.cycle_start_date + timedelta(days=horizon_days)
     for item in assignments:
         if item.educator_id not in educator_ids:
             messages.append(
@@ -178,7 +180,7 @@ def _assignment_shape_messages(
             messages.append(
                 error(
                     rules.RULE_CROSS_WEEK,
-                    "Przydział znajduje się poza sześciotygodniowym cyklem.",
+                    "Przydział znajduje się poza wybranym horyzontem planowania.",
                     educator_id=item.educator_id,
                     date_value=item.date,
                 )
@@ -315,7 +317,9 @@ def _hours_and_days_messages(
     for educator in configuration.educators:
         if not educator.active:
             continue
-        for week_number in range(1, rules.CYCLE_WEEKS + 1):
+        for week_number in range(
+            1, configuration.planning_horizon_weeks + 1
+        ):
             start = configuration.cycle_start_date + timedelta(
                 days=(week_number - 1) * 7
             )
@@ -426,6 +430,52 @@ def _daily_rest_messages(
 ) -> list[DomainMessage]:
     messages: list[DomainMessage] = []
     minimum = configuration.legal_rules.minimum_daily_rest_minutes
+    horizon_days = configuration.planning_horizon_weeks * 7
+    cyclic = (
+        configuration.schedule_boundary_mode == ScheduleBoundaryMode.CYCLIC
+    )
+    boundary_by_educator = {
+        item.educator_id: item
+        for item in (
+            configuration.boundary_context.educators
+            if configuration.boundary_context is not None
+            else []
+        )
+    }
+
+    def append_if_short(
+        educator_id: str,
+        previous_date: date,
+        previous_end: int,
+        next_date: date,
+        next_start: int,
+        *,
+        boundary: bool,
+    ) -> None:
+        last_end = aware_local_datetime(
+            previous_date,
+            previous_end,
+            configuration.time_zone_id,
+        ).astimezone(UTC)
+        first_start = aware_local_datetime(
+            next_date,
+            next_start,
+            configuration.time_zone_id,
+        ).astimezone(UTC)
+        actual = int((first_start - last_end).total_seconds() // 60)
+        if actual < minimum:
+            messages.append(
+                error(
+                    rules.RULE_CROSS_WEEK if boundary else rules.RULE_REST_DAILY,
+                    "Rzeczywisty odpoczynek dobowy jest za krótki.",
+                    educator_id=educator_id,
+                    date_value=previous_date,
+                    required=minimum,
+                    actual=actual,
+                    context={"nextWorkDate": next_date.isoformat()},
+                )
+            )
+
     for educator in configuration.educators:
         if not educator.active:
             continue
@@ -433,58 +483,54 @@ def _daily_rest_messages(
         for item in assignments:
             if item.educator_id == educator.id:
                 by_date[item.date].append(item)
-                by_date[item.date + timedelta(days=rules.CYCLE_DAYS)].append(
-                    item.model_copy(
-                        update={
-                            "date": item.date + timedelta(days=rules.CYCLE_DAYS)
-                        }
-                    )
-                )
         work_dates = sorted(by_date)
-        original_dates = [
-            value
-            for value in work_dates
-            if value < configuration.cycle_start_date
-            + timedelta(days=rules.CYCLE_DAYS)
-        ]
-        for work_date in original_dates:
-            next_date = next(
-                (value for value in work_dates if value > work_date),
-                None,
+        for previous_date, next_date in zip(work_dates, work_dates[1:]):
+            append_if_short(
+                educator.id,
+                previous_date,
+                max(item.end_minute for item in by_date[previous_date]),
+                next_date,
+                min(item.start_minute for item in by_date[next_date]),
+                boundary=False,
             )
-            if next_date is None:
-                continue
-            last = max(by_date[work_date], key=lambda item: item.end_minute)
-            first = min(by_date[next_date], key=lambda item: item.start_minute)
-            last_end = aware_local_datetime(
-                last.date,
-                last.end_minute,
-                configuration.time_zone_id,
-            ).astimezone(UTC)
-            first_start = aware_local_datetime(
-                first.date,
-                first.start_minute,
-                configuration.time_zone_id,
-            ).astimezone(UTC)
-            actual = int((first_start - last_end).total_seconds() // 60)
-            if actual < minimum:
-                rule_id = (
-                    rules.RULE_CROSS_WEEK
-                    if next_date
-                    >= configuration.cycle_start_date
-                    + timedelta(days=rules.CYCLE_DAYS)
-                    else rules.RULE_REST_DAILY
+        if cyclic and work_dates:
+            append_if_short(
+                educator.id,
+                work_dates[-1],
+                max(item.end_minute for item in by_date[work_dates[-1]]),
+                work_dates[0] + timedelta(days=horizon_days),
+                min(item.start_minute for item in by_date[work_dates[0]]),
+                boundary=True,
+            )
+        if not cyclic:
+            boundary = boundary_by_educator.get(educator.id)
+            if (
+                boundary is not None
+                and boundary.last_assignment_before is not None
+                and work_dates
+            ):
+                previous = boundary.last_assignment_before
+                append_if_short(
+                    educator.id,
+                    previous.date,
+                    previous.end_minute,
+                    work_dates[0],
+                    min(item.start_minute for item in by_date[work_dates[0]]),
+                    boundary=True,
                 )
-                messages.append(
-                    error(
-                        rule_id,
-                        "Rzeczywisty odpoczynek dobowy jest za krótki.",
-                        educator_id=educator.id,
-                        date_value=work_date,
-                        required=minimum,
-                        actual=actual,
-                        context={"nextWorkDate": next_date.isoformat()},
-                    )
+            if (
+                boundary is not None
+                and boundary.first_assignment_after is not None
+                and work_dates
+            ):
+                following = boundary.first_assignment_after
+                append_if_short(
+                    educator.id,
+                    work_dates[-1],
+                    max(item.end_minute for item in by_date[work_dates[-1]]),
+                    following.date,
+                    following.start_minute,
+                    boundary=True,
                 )
     return messages
 
@@ -495,12 +541,30 @@ def _merged_utc_work(
     educator_id: str,
 ) -> list[tuple[datetime, datetime]]:
     raw = []
+    horizon_days = configuration.planning_horizon_weeks * 7
+    cyclic = (
+        configuration.schedule_boundary_mode == ScheduleBoundaryMode.CYCLIC
+    )
     for item in assignments:
         if item.educator_id != educator_id:
             continue
-        raw.append(_utc_interval(configuration, item, date_shift=-rules.CYCLE_DAYS))
+        if cyclic:
+            raw.append(
+                _utc_interval(
+                    configuration,
+                    item,
+                    date_shift=-horizon_days,
+                )
+            )
         raw.append(_utc_interval(configuration, item))
-        raw.append(_utc_interval(configuration, item, date_shift=rules.CYCLE_DAYS))
+        if cyclic:
+            raw.append(
+                _utc_interval(
+                    configuration,
+                    item,
+                    date_shift=horizon_days,
+                )
+            )
     raw.sort()
     merged: list[list[datetime]] = []
     for start, end in raw:
@@ -537,12 +601,29 @@ def _maximum_free_minutes(
 
 def _global_free_periods(
     work: list[tuple[datetime, datetime]],
+    *,
+    boundary_start: datetime | None = None,
+    boundary_end: datetime | None = None,
 ) -> list[tuple[datetime, datetime]]:
-    return [
+    result = [
         (current_end, next_start)
         for (_, current_end), (next_start, _) in zip(work, work[1:])
         if next_start > current_end
     ]
+    if boundary_start is not None and boundary_end is not None:
+        relevant = [
+            (start, end)
+            for start, end in work
+            if end > boundary_start and start < boundary_end
+        ]
+        if not relevant:
+            return [(boundary_start, boundary_end)]
+        if relevant[0][0] > boundary_start:
+            result.append((boundary_start, min(relevant[0][0], boundary_end)))
+        if relevant[-1][1] < boundary_end:
+            result.append((max(relevant[-1][1], boundary_start), boundary_end))
+        result.sort()
+    return result
 
 
 def _rest_options(
@@ -594,6 +675,10 @@ def _weekly_windows(
     configuration: ScheduleConfiguration,
 ) -> list[tuple[datetime, datetime]]:
     legal = configuration.legal_rules
+    horizon_days = configuration.planning_horizon_weeks * 7
+    cyclic = (
+        configuration.schedule_boundary_mode == ScheduleBoundaryMode.CYCLIC
+    )
     step = configuration.organizational_rules.time_step_minutes
     anchor_minute = parse_hhmm(legal.weekly_rest_anchor_time)
     anchor_slot = anchor_minute // step
@@ -616,7 +701,7 @@ def _weekly_windows(
         ).astimezone(UTC)
 
     cycle_end = aware_local_datetime(
-        configuration.cycle_start_date + timedelta(days=rules.CYCLE_DAYS),
+        configuration.cycle_start_date + timedelta(days=horizon_days),
         0,
         configuration.time_zone_id,
     ).astimezone(UTC)
@@ -624,22 +709,32 @@ def _weekly_windows(
         result = []
         window_slots = legal.weekly_rest_window_length_minutes // step
         cursor = first_anchor_index
-        while cursor < rules.CYCLE_DAYS * rules.SLOTS_PER_DAY:
-            result.append(
-                (local_boundary_utc(cursor), local_boundary_utc(cursor + window_slots))
-            )
+        horizon_slots = horizon_days * rules.SLOTS_PER_DAY
+        while cursor < horizon_slots:
+            if cyclic or (
+                cursor >= 0 and cursor + window_slots <= horizon_slots
+            ):
+                result.append(
+                    (
+                        local_boundary_utc(cursor),
+                        local_boundary_utc(cursor + window_slots),
+                    )
+                )
             cursor += 7 * rules.SLOTS_PER_DAY
         return result
     result = []
     start = local_boundary_utc(first_anchor_index)
+    horizon_start = aware_local_datetime(
+        configuration.cycle_start_date,
+        0,
+        configuration.time_zone_id,
+    ).astimezone(UTC)
     while start < cycle_end:
-        result.append(
-            (
-                start,
-                start
-                + timedelta(minutes=legal.weekly_rest_window_length_minutes),
-            )
+        end = start + timedelta(
+            minutes=legal.weekly_rest_window_length_minutes
         )
+        if cyclic or (start >= horizon_start and end <= cycle_end):
+            result.append((start, end))
         start += timedelta(minutes=legal.weekly_rest_window_step_minutes)
     return result
 
@@ -651,11 +746,29 @@ def _weekly_rest_messages(
     messages: list[DomainMessage] = []
     legal = configuration.legal_rules
     windows = _weekly_windows(configuration)
+    cyclic = (
+        configuration.schedule_boundary_mode == ScheduleBoundaryMode.CYCLIC
+    )
+    horizon_start = aware_local_datetime(
+        configuration.cycle_start_date,
+        0,
+        configuration.time_zone_id,
+    ).astimezone(UTC)
+    horizon_end = aware_local_datetime(
+        configuration.cycle_start_date
+        + timedelta(days=configuration.planning_horizon_weeks * 7),
+        0,
+        configuration.time_zone_id,
+    ).astimezone(UTC)
     for educator in configuration.educators:
         if not educator.active:
             continue
         work = _merged_utc_work(configuration, assignments, educator.id)
-        free_periods = _global_free_periods(work)
+        free_periods = _global_free_periods(
+            work,
+            boundary_start=None if cyclic else horizon_start,
+            boundary_end=None if cyclic else horizon_end,
+        )
         exceptions: list[datetime] = []
         reusable_options: list[list[int]] = []
         for window_index, (window_start, window_end) in enumerate(windows, start=1):
@@ -778,7 +891,9 @@ def _weekend_messages(
     assignments: list[WorkAssignment],
 ) -> list[DomainMessage]:
     messages: list[DomainMessage] = []
-    for week_number in range(1, rules.CYCLE_WEEKS + 1):
+    for week_number in range(
+        1, configuration.planning_horizon_weeks + 1
+    ):
         saturday = configuration.cycle_start_date + timedelta(
             days=(week_number - 1) * 7 + 5
         )
@@ -826,9 +941,16 @@ def _weekend_messages(
                     )
                 )
 
+    if not (
+        configuration.educator_count == 3
+        and configuration.planning_horizon_weeks == rules.ROTATION_WEEKS
+        and configuration.schedule_boundary_mode == ScheduleBoundaryMode.CYCLIC
+    ):
+        return messages
+
     off_counts: Counter[str] = Counter()
     pair_counts: Counter[tuple[str, str]] = Counter()
-    for week_number in range(1, rules.CYCLE_WEEKS + 1):
+    for week_number in range(1, rules.ROTATION_WEEKS + 1):
         saturday = configuration.cycle_start_date + timedelta(
             days=(week_number - 1) * 7 + 5
         )
@@ -838,7 +960,8 @@ def _weekend_messages(
             saturday=saturday,
             sunday=saturday + timedelta(days=1),
         )
-        off_counts[variant.off_educator_id] += 1
+        if variant.off_educator_id is not None:
+            off_counts[variant.off_educator_id] += 1
         working = sorted(
             {
                 educator_id
@@ -918,6 +1041,33 @@ def validate_schedule(
     calculated_care: list[CalculatedCareDay] | None = None,
 ) -> ValidationReport:
     messages: list[DomainMessage] = []
+    if configuration.schedule_boundary_mode == ScheduleBoundaryMode.FINITE:
+        contexts = (
+            {
+                item.educator_id: item
+                for item in configuration.boundary_context.educators
+            }
+            if configuration.boundary_context is not None
+            else {}
+        )
+        incomplete = [
+            educator.id
+            for educator in configuration.educators
+            if educator.active
+            and (
+                educator.id not in contexts
+                or contexts[educator.id].last_assignment_before is None
+                or contexts[educator.id].first_assignment_after is None
+            )
+        ]
+        if incomplete:
+            messages.append(
+                warning(
+                    rules.RULE_CROSS_WEEK,
+                    "Brak pełnego kontekstu granicznego ogranicza walidację odpoczynku przed i po horyzoncie.",
+                    actual=", ".join(incomplete),
+                )
+            )
     try:
         independent_care = calculate_care_independently(configuration)
     except (ValueError, TimeDomainError) as exc:

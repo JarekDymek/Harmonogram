@@ -27,7 +27,10 @@ export function WeekendsPage() {
         weekNumber: 1,
         saturdayDate: saturday.toISOString().slice(0, 10),
         sundayDate: sunday.toISOString().slice(0, 10),
-        offEducatorId: configuration.educators[2]?.id,
+        offEducatorId:
+          configuration.educatorCount === 3
+            ? configuration.educators[2]?.id
+            : "",
       });
     }
   }, [configuration, substituteForm]);
@@ -76,7 +79,7 @@ export function WeekendsPage() {
     item.applicableWeekNumber = Number(values.weekNumber);
     item.applicableSaturdayDate = values.saturdayDate;
     item.applicableSundayDate = values.sundayDate;
-    item.offEducatorId = values.offEducatorId;
+    item.offEducatorId = values.offEducatorId || null;
     item.approvalReference = "ZATWIERDZENIE-UŻYTKOWNIKA";
     item.approvedAt = new Date().toISOString();
     item.approvedBy = "UŻYTKOWNIK";
@@ -113,7 +116,7 @@ export function WeekendsPage() {
       <PageHeader
         eyebrow="KROK 05 · WEEKENDY"
         title="Zatwierdzone wzorce 1:1"
-        description="Każdy odcinek jest wejściem krytycznym. Generator nie zmienia osoby, czasu ani kolejności."
+        description="Każdy odcinek jest wejściem krytycznym. Dla czterech osób wzorzec nadal jawnie wskazuje dokładnie dwie osoby pracujące, bez automatycznego założenia o sprawiedliwości."
         actions={
           <button className="button button--primary" type="button" onClick={save}>
             Zapisz wzorce
@@ -121,7 +124,20 @@ export function WeekendsPage() {
         }
       />
       <div className="weekend-grid">
-        {base.map((variant) => (
+        {base.map((variant) => {
+          const working = new Set([
+            ...variant.saturdayTemplate.assignments.map(
+              (item) => item.educatorId,
+            ),
+            ...variant.sundayTemplate.assignments.map(
+              (item) => item.educatorId,
+            ),
+          ]);
+          const notWorking = configuration.educators
+            .filter((item) => !working.has(item.id))
+            .map((item) => item.shortCode)
+            .join(", ");
+          return (
           <article className="weekend-card" key={variant.id}>
             <header>
               <div>
@@ -131,8 +147,8 @@ export function WeekendsPage() {
                 <h2>Pozycja {variant.positionInCycle}</h2>
               </div>
               <div className="off-person">
-                <small>Wolny weekend</small>
-                <strong>{variant.offEducatorId}</strong>
+                <small>Nie pracują</small>
+                <strong>{notWorking || "—"}</strong>
               </div>
             </header>
             {(
@@ -205,7 +221,8 @@ export function WeekendsPage() {
               <small>{variant.approvalReference}</small>
             </footer>
           </article>
-        ))}
+          );
+        })}
       </div>
       <section className="section-block">
         <div className="section-heading">
@@ -235,7 +252,7 @@ export function WeekendsPage() {
             <input
               type="number"
               min="1"
-              max="6"
+              max={configuration.planningHorizonWeeks}
               {...substituteForm.register("weekNumber", {
                 valueAsNumber: true,
               })}
@@ -258,8 +275,11 @@ export function WeekendsPage() {
             />
           </label>
           <label>
-            Osoba wolna
+            Oznaczona osoba niepracująca
             <select {...substituteForm.register("offEducatorId")}>
+              {configuration.educatorCount === 4 && (
+                <option value="">Bez pojedynczego wskazania</option>
+              )}
               {configuration.educators.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.shortCode}

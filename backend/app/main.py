@@ -74,9 +74,9 @@ async def unhandled_error(request: Request, exc: Exception) -> JSONResponse:
 def create_app(static_frontend: Path | None = None) -> FastAPI:
     application = FastAPI(
         title="Harmonogram MOW API",
-        version="1.1.0",
+        version="1.2.0",
         description=(
-            "API generatora sześciotygodniowego harmonogramu. "
+            "API generatora harmonogramu 1–6 tygodni dla 3 lub 4 wychowawców. "
             "Profil demonstracyjny nie stanowi weryfikacji prawnej."
         ),
     )

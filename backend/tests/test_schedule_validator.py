@@ -120,13 +120,22 @@ def test_preferred_unavailability_is_only_a_warning(generated_demo):
 def test_daily_rest_violation_is_detected(generated_demo):
     configuration, response = generated_demo
     assignments = cloned_assignments(response)
-    monday_week_two = configuration.cycle_start_date + timedelta(days=7)
-    morning = next(
-        item
-        for item in assignments
-        if item.date == monday_week_two and item.start_minute == 6 * 60
-    )
-    morning.educator_id = "B"
+    dates = sorted({item.date for item in assignments})
+    changed = False
+    for previous_date, next_date in zip(dates, dates[1:]):
+        previous = max(
+            (item for item in assignments if item.date == previous_date),
+            key=lambda item: item.end_minute,
+        )
+        following = min(
+            (item for item in assignments if item.date == next_date),
+            key=lambda item: item.start_minute,
+        )
+        if following.start_minute + 1440 - previous.end_minute < 660:
+            following.educator_id = previous.educator_id
+            changed = True
+            break
+    assert changed
     report = validate_schedule(configuration, assignments)
     assert "REQ-REST-DAILY-001" in ids(report)
 

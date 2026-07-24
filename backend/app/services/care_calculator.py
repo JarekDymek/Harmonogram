@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date
 
-from app.domain.rules import CYCLE_DAYS
 from app.models.schemas import (
     CalculatedCareDay,
     CareInterval,
@@ -105,7 +104,7 @@ def calculate_care(
 ) -> list[CalculatedCareDay]:
     step = configuration.organizational_rules.time_step_minutes
     result: list[CalculatedCareDay] = []
-    for day_index in range(CYCLE_DAYS):
+    for day_index in range(configuration.planning_horizon_weeks * 7):
         current = configuration.cycle_start_date.fromordinal(
             configuration.cycle_start_date.toordinal() + day_index
         )

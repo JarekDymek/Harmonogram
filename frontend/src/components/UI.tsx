@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { CareInterval, DomainMessage } from "../types";
+import { formatHoursFromMinutes } from "../time";
 
 export const DAY_NAMES = [
   "Poniedziałek",
@@ -61,9 +62,20 @@ export function minutesToTime(value: number) {
 }
 
 export function formatMinutes(value: number) {
-  const hours = Math.floor(value / 60);
-  const minutes = value % 60;
-  return `${hours} godz. ${minutes ? `${minutes} min` : ""}`.trim();
+  return `${formatHoursFromMinutes(value)} godz.`;
+}
+
+function messageValue(
+  value: string | number | null | undefined,
+  ruleId: string,
+) {
+  if (value === null || value === undefined) return "—";
+  const durationRule =
+    typeof value === "number" &&
+    ["HOURS", "REST", "SEGMENT", "TIME-STEP", "LEGAL", "CROSS-WEEK"].some((part) =>
+      ruleId.includes(part),
+    );
+  return durationRule ? formatMinutes(value) : value;
 }
 
 export function Timeline({ intervals }: { intervals: CareInterval[] }) {
@@ -123,7 +135,8 @@ export function MessagesTable({ messages }: { messages: DomainMessage[] }) {
                   .join(" · ") || "—"}
               </td>
               <td>
-                {message.requiredValue ?? "—"} / {message.actualValue ?? "—"}
+                {messageValue(message.requiredValue, message.ruleId)} /{" "}
+                {messageValue(message.actualValue, message.ruleId)}
               </td>
             </tr>
           ))}

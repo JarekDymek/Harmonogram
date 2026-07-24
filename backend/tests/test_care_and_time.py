@@ -30,10 +30,10 @@ def test_set_difference_does_not_double_count_minutes():
     assert sum(end - start for start, end in result) == 240
 
 
-def test_demo_care_has_42_complete_dates(demo_config):
+def test_demo_care_has_one_complete_week(demo_config):
     result = calculate_care(demo_config)
-    assert len(result) == 42
-    assert sum(item.total_required_minutes for item in result[:7]) == 4920
+    assert len(result) == 7
+    assert sum(item.total_required_minutes for item in result) == 4920
 
 
 @pytest.mark.parametrize(

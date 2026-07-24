@@ -17,7 +17,8 @@ const navigation = [
 
 export function Layout() {
   const [open, setOpen] = useState(false);
-  const { configuration, busy, error, clearError } = useAppState();
+  const { configuration, busy, error, clearError, migrationPending } =
+    useAppState();
   const online = useOnlineStatus();
   const { canInstall, installed, install } = usePwaInstall();
   return (
@@ -32,7 +33,7 @@ export function Layout() {
           </span>
           <div>
             <strong>Harmonogram</strong>
-            <small>MOW · cykl 6 tygodni</small>
+            <small>MOW · 1–6 tygodni</small>
           </div>
         </div>
         <nav aria-label="Główna nawigacja">
@@ -105,7 +106,7 @@ export function Layout() {
               >
                 {configuration.requestedOperationMode === "DEMONSTRATION"
                   ? "Tryb demonstracyjny"
-                  : "Tryb produkcyjny"}
+                  : "Tryb rzeczywisty"}
               </span>
             )}
           </div>
@@ -117,6 +118,15 @@ export function Layout() {
             <button type="button" onClick={clearError} aria-label="Zamknij błąd">
               ×
             </button>
+          </div>
+        )}
+        {migrationPending && (
+          <div className="global-error migration-notice" role="status">
+            <strong>Wczytano konfigurację ze starszej wersji.</strong>
+            <span>
+              Wartości godzin zachowano bez zmian. Zapisz wybrany formularz,
+              aby zatwierdzić migrację do nowego schematu.
+            </span>
           </div>
         )}
         <main id="main-content" className="main-content">

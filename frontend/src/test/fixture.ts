@@ -1,6 +1,7 @@
 import type { ScheduleConfiguration } from "../types";
 
 export const configurationFixture: ScheduleConfiguration = {
+  schemaVersion: 2,
   projectId: "TEST",
   projectName: "Testowy harmonogram",
   configurationVersionId: "CV-TEST",
@@ -10,8 +11,9 @@ export const configurationFixture: ScheduleConfiguration = {
   cycleStartDate: "2026-09-14",
   weekStartDay: "MONDAY",
   timeZoneId: "Europe/Warsaw",
-  cycleLengthWeeks: 6,
-  cycleIsRepeating: true,
+  educatorCount: 3,
+  planningHorizonWeeks: 1,
+  scheduleBoundaryMode: "FINITE",
   startingWeekendVariant: 1,
   requestedOperationMode: "DEMONSTRATION",
   educators: ["A", "B", "C"].map((id, index) => ({

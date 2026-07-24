@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.models.schemas import (
     DayCarePlan,
     Educator,
     EducatorUnavailability,
-    EducatorWeekAssignmentOverride,
     EventType,
     LegalRulesConfiguration,
     LegalStatus,
@@ -15,6 +14,7 @@ from app.models.schemas import (
     OrganizationalRulesConfiguration,
     PlanScope,
     ScheduleConfiguration,
+    ScheduleBoundaryMode,
     TimeInterval,
     UnavailabilityScope,
     UnavailabilityType,
@@ -151,49 +151,7 @@ def _variant(position: int, first: str, second: str, off: str) -> WeekendRotatio
 
 def demo_configuration() -> ScheduleConfiguration:
     cycle_start = datetime(2026, 9, 14).date()
-    special_date = cycle_start + timedelta(days=9)
     plans = [_base_plan(day) for day in range(7)]
-    plans.append(
-        DayCarePlan(
-            id="PLAN-SPECIAL-2026-09-23",
-            configuration_version_id=DEMO_VERSION,
-            group_id=DEMO_GROUP,
-            scope=PlanScope.SPECIFIC_DATE,
-            date=special_date,
-            operating_intervals=[
-                _interval(
-                    "SPECIAL-OPERATING",
-                    "06:00",
-                    "22:00",
-                    description="Pełny plan dnia specjalnego.",
-                )
-            ],
-            no_care_intervals=[
-                _interval(
-                    "SPECIAL-TRIP",
-                    "08:00",
-                    "15:00",
-                    event_type=EventType.TRIP,
-                    description="Wycieczka — opieka internatu nie jest wymagana.",
-                )
-            ],
-            event_type=EventType.TRIP,
-            description=(
-                "Zatwierdzony kompletny wyjątek dla daty; pokazuje dynamiczne "
-                "obliczanie zapotrzebowania."
-            ),
-            approved=True,
-            approved_at=datetime(
-                2026,
-                7,
-                24,
-                10,
-                0,
-                tzinfo=ZoneInfo("Europe/Warsaw"),
-            ),
-            approved_by="DEMO_ADMIN",
-        )
-    )
     educators = [
         Educator(
             id="A",
@@ -220,15 +178,8 @@ def demo_configuration() -> ScheduleConfiguration:
             description="Dane demonstracyjne.",
         ),
     ]
-    approved_at = datetime(
-        2026,
-        7,
-        24,
-        10,
-        15,
-        tzinfo=ZoneInfo("Europe/Warsaw"),
-    )
     return ScheduleConfiguration(
+        schema_version=2,
         project_id="HARMONOGRAM-MOW-DEMO",
         project_name="Harmonogram MOW — demonstracja",
         configuration_version_id=DEMO_VERSION,
@@ -238,26 +189,13 @@ def demo_configuration() -> ScheduleConfiguration:
         cycle_start_date=cycle_start,
         week_start_day="MONDAY",
         time_zone_id="Europe/Warsaw",
-        cycle_length_weeks=6,
-        cycle_is_repeating=True,
+        educator_count=3,
+        planning_horizon_weeks=1,
+        schedule_boundary_mode=ScheduleBoundaryMode.FINITE,
         starting_weekend_variant=1,
         requested_operation_mode=OperationMode.DEMONSTRATION,
         educators=educators,
-        assignment_overrides=[
-            EducatorWeekAssignmentOverride(
-                id="OVERRIDE-C-W2",
-                educator_id="C",
-                configuration_version_id=DEMO_VERSION,
-                week_number=2,
-                assigned_minutes=1560,
-                reason=(
-                    "Pełny przydział zastępczy równoważący mniejsze "
-                    "zapotrzebowanie dnia specjalnego."
-                ),
-                approved_at=approved_at,
-                approved_by="DEMO_ADMIN",
-            )
-        ],
+        assignment_overrides=[],
         day_plans=plans,
         unavailability=[
             EducatorUnavailability(

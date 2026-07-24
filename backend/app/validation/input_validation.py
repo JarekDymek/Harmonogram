@@ -14,6 +14,7 @@ from app.models.schemas import (
     PlanScope,
     PublicResult,
     ScheduleConfiguration,
+    ScheduleBoundaryMode,
     UnavailabilityScope,
     WeekendDay,
     WeekendVariantKind,
@@ -61,13 +62,16 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
                 actual=f"{configuration.cycle_start_date:%A} / {configuration.week_start_day}",
             )
         )
-    if configuration.cycle_length_weeks != 6 or not configuration.cycle_is_repeating:
+    if (
+        configuration.schedule_boundary_mode == ScheduleBoundaryMode.CYCLIC
+        and configuration.planning_horizon_weeks != 6
+    ):
         messages.append(
             error(
                 rules.RULE_CROSS_WEEK,
-                "Pierwsza wersja wymaga kołowego cyklu sześciu tygodni.",
-                required="6 / true",
-                actual=f"{configuration.cycle_length_weeks} / {configuration.cycle_is_repeating}",
+                "Tryb CYCLIC jest dozwolony wyłącznie dla sześciu tygodni.",
+                required="6 tygodni",
+                actual=configuration.planning_horizon_weeks,
             )
         )
     try:
@@ -105,12 +109,12 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
         )
 
     active_educators = [item for item in configuration.educators if item.active]
-    if len(active_educators) != 3:
+    if len(active_educators) != configuration.educator_count:
         messages.append(
             error(
                 rules.RULE_NO_GUESSING,
-                "Pierwsza wersja wymaga dokładnie trzech aktywnych wychowawców.",
-                required=3,
+                "Liczba aktywnych wychowawców musi odpowiadać konfiguracji grupy.",
+                required=configuration.educator_count,
                 actual=len(active_educators),
             )
         )
@@ -120,11 +124,21 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
             error(
                 rules.RULE_NO_GUESSING,
                 "Identyfikatory wychowawców muszą być unikalne.",
-                required="3 unikalne identyfikatory",
+                required=f"{configuration.educator_count} unikalne identyfikatory",
                 actual=educator_ids,
             )
         )
     for educator in active_educators:
+        if not educator.display_name.strip() or not educator.short_code.strip():
+            messages.append(
+                error(
+                    rules.RULE_NO_GUESSING,
+                    "Każdy aktywny wychowawca wymaga nazwy i skrótu.",
+                    educator_id=educator.id,
+                    required="nazwa i skrót",
+                    actual=f"{educator.display_name!r} / {educator.short_code!r}",
+                )
+            )
         if educator.group_id != configuration.group_id:
             messages.append(
                 error(
@@ -139,7 +153,7 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
             messages.append(
                 error(
                     rules.RULE_WEEKEND,
-                    "W sztywnej rotacji wszyscy trzej wychowawcy muszą móc pracować w weekend.",
+                    "Każdy aktywny wychowawca musi móc zostać wskazany w jawnym wzorcu weekendowym.",
                     educator_id=educator.id,
                     required=True,
                     actual=False,
@@ -330,9 +344,14 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
             name
             for name, value in (
                 ("sourceTitle", legal.source_title),
-                ("sourceIdentifier", legal.source_identifier),
+                (
+                    "sourceIdentifierOrDescription",
+                    legal.source_identifier or legal.source_section,
+                ),
                 ("verifiedAt", legal.verified_at),
+                ("effectiveFrom", legal.effective_from),
                 ("approvedBy", legal.approved_by),
+                ("version", legal.version),
             )
             if not value
         ]
@@ -345,12 +364,16 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
                     actual=", ".join(missing_trace),
                 )
             )
-        cycle_end = configuration.cycle_start_date + timedelta(days=41)
+        cycle_end = configuration.cycle_start_date + timedelta(
+            days=configuration.planning_horizon_weeks * 7 - 1
+        )
         if (
             legal.effective_from is None
-            or legal.effective_to is None
             or configuration.cycle_start_date < legal.effective_from
-            or cycle_end > legal.effective_to
+            or (
+                legal.effective_to is not None
+                and cycle_end > legal.effective_to
+            )
         ):
             messages.append(
                 error(
@@ -455,15 +478,46 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
         (2, 0, 1),
         (2, 1, 0),
     )
-    if len(educator_ids) == 3:
-        for position, pair in enumerate(expected_pairs, start=1):
-            matches = [item for item in base_variants if item.position_in_cycle == position]
-            if len(matches) != 1:
-                continue
-            variant = matches[0]
+    for position in range(1, 7):
+        matches = [
+            item for item in base_variants if item.position_in_cycle == position
+        ]
+        if len(matches) != 1:
+            continue
+        variant = matches[0]
+        working = variant_working_educators(variant)
+        if len(working) != 2 or not working.issubset(set(educator_ids)):
+            messages.append(
+                error(
+                    rules.RULE_WEEKEND,
+                    "Każdy wariant weekendowy musi jawnie wskazywać dokładnie dwóch aktywnych wychowawców.",
+                    required="2 aktywnych wychowawców",
+                    actual=sorted(working),
+                    context={"position": position},
+                )
+            )
+        saturday_workers = {
+            item.educator_id
+            for item in variant.saturday_template.assignments
+        }
+        sunday_workers = {
+            item.educator_id
+            for item in variant.sunday_template.assignments
+        }
+        if saturday_workers != working or sunday_workers != working:
+            messages.append(
+                error(
+                    rules.RULE_WEEKEND,
+                    "Sobota i niedziela wariantu muszą wskazywać tę samą jawną parę.",
+                    required=sorted(working),
+                    actual=f"{sorted(saturday_workers)} / {sorted(sunday_workers)}",
+                    context={"position": position},
+                )
+            )
+        if len(educator_ids) == 3:
+            pair = expected_pairs[position - 1]
             expected_working = {educator_ids[pair[0]], educator_ids[pair[1]]}
             expected_off = educator_ids[pair[2]]
-            working = variant_working_educators(variant)
             if working != expected_working or variant.off_educator_id != expected_off:
                 messages.append(
                     error(
@@ -474,48 +528,148 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
                         context={"position": position},
                     )
                 )
-            for template, expected_day in (
-                (variant.saturday_template, WeekendDay.SATURDAY),
-                (variant.sunday_template, WeekendDay.SUNDAY),
+        elif (
+            variant.off_educator_id is not None
+            and variant.off_educator_id not in set(educator_ids) - working
+        ):
+            messages.append(
+                error(
+                    rules.RULE_WEEKEND,
+                    "Opcjonalna osoba wolna musi należeć do aktywnych osób nieujętych we wzorcu.",
+                    actual=variant.off_educator_id,
+                    context={"position": position},
+                )
+            )
+        for template, expected_day in (
+            (variant.saturday_template, WeekendDay.SATURDAY),
+            (variant.sunday_template, WeekendDay.SUNDAY),
+        ):
+            if template.day_of_week != expected_day:
+                messages.append(
+                    error(
+                        rules.RULE_WEEKEND,
+                        "Szablon weekendu ma niepoprawny dzień.",
+                        required=expected_day,
+                        actual=template.day_of_week,
+                        context={"variantId": variant.id},
+                    )
+                )
+            sequence = [
+                item.sequence_number
+                for item in sorted(
+                    template.assignments,
+                    key=lambda value: value.sequence_number,
+                )
+            ]
+            if sequence != list(range(1, len(sequence) + 1)):
+                messages.append(
+                    error(
+                        rules.RULE_WEEKEND,
+                        "sequenceNumber musi być ciągły od 1.",
+                        required=list(range(1, len(sequence) + 1)),
+                        actual=sequence,
+                        context={"variantId": variant.id},
+                    )
+                )
+            for item in template.assignments:
+                if item.educator_id not in educator_ids:
+                    messages.append(
+                        error(
+                            rules.RULE_WEEKEND,
+                            "Szablon wskazuje nieaktywnego wychowawcę.",
+                            educator_id=item.educator_id,
+                            context={"variantId": variant.id},
+                        )
+                    )
+                try:
+                    start = parse_hhmm(item.start_time)
+                    end = parse_hhmm(item.end_time)
+                    if start % org.time_step_minutes or end % org.time_step_minutes:
+                        raise TimeDomainError(
+                            "Granica szablonu nie jest zgodna z krokiem."
+                        )
+                    if end - start < org.minimum_segment_minutes:
+                        raise TimeDomainError(
+                            "Odcinek szablonu jest krótszy niż 120 minut."
+                        )
+                except TimeDomainError as exc:
+                    messages.append(
+                        error(
+                            rules.RULE_WEEKEND,
+                            str(exc),
+                            educator_id=item.educator_id,
+                            context={"variantId": variant.id},
+                        )
+                    )
+
+    if configuration.boundary_context is not None:
+        context_ids = [
+            item.educator_id for item in configuration.boundary_context.educators
+        ]
+        if len(context_ids) != len(set(context_ids)):
+            messages.append(
+                error(
+                    rules.RULE_CROSS_WEEK,
+                    "Kontekst graniczny zawiera duplikat wychowawcy.",
+                    actual=context_ids,
+                )
+            )
+        unknown = sorted(set(context_ids) - set(educator_ids))
+        if unknown:
+            messages.append(
+                error(
+                    rules.RULE_CROSS_WEEK,
+                    "Kontekst graniczny wskazuje nieaktywnych wychowawców.",
+                    actual=unknown,
+                )
+            )
+        horizon_end = configuration.cycle_start_date + timedelta(
+            days=configuration.planning_horizon_weeks * 7
+        )
+        for item in configuration.boundary_context.educators:
+            previous = item.last_assignment_before
+            following = item.first_assignment_after
+            for label, segment in (
+                ("lastAssignmentBefore", previous),
+                ("firstAssignmentAfter", following),
             ):
-                if template.day_of_week != expected_day:
-                    messages.append(
-                        error(
-                            rules.RULE_WEEKEND,
-                            "Szablon weekendu ma niepoprawny dzień.",
-                            required=expected_day,
-                            actual=template.day_of_week,
-                            context={"variantId": variant.id},
-                        )
-                    )
-                sequence = [item.sequence_number for item in sorted(template.assignments, key=lambda value: value.sequence_number)]
-                if sequence != list(range(1, len(sequence) + 1)):
-                    messages.append(
-                        error(
-                            rules.RULE_WEEKEND,
-                            "sequenceNumber musi być ciągły od 1.",
-                            required=list(range(1, len(sequence) + 1)),
-                            actual=sequence,
-                            context={"variantId": variant.id},
-                        )
-                    )
-                for item in template.assignments:
-                    try:
-                        start = parse_hhmm(item.start_time)
-                        end = parse_hhmm(item.end_time)
-                        if start % org.time_step_minutes or end % org.time_step_minutes:
-                            raise TimeDomainError("Granica szablonu nie jest zgodna z krokiem.")
-                        if end - start < org.minimum_segment_minutes:
-                            raise TimeDomainError("Odcinek szablonu jest krótszy niż 120 minut.")
-                    except TimeDomainError as exc:
+                if segment is not None:
+                    duration = segment.end_minute - segment.start_minute
+                    if (
+                        duration < org.minimum_segment_minutes
+                        or segment.start_minute % org.time_step_minutes
+                        or segment.end_minute % org.time_step_minutes
+                    ):
                         messages.append(
                             error(
-                                rules.RULE_WEEKEND,
-                                str(exc),
+                                rules.RULE_CROSS_WEEK,
+                                "Odcinek kontekstu granicznego musi mieć co najmniej 2 godziny i granice w kroku 30 minut.",
                                 educator_id=item.educator_id,
-                                context={"variantId": variant.id},
+                                required="minimum 120, krok 30",
+                                actual=f"{segment.start_minute}–{segment.end_minute}",
+                                context={"field": label},
                             )
                         )
+            if previous is not None and previous.date >= configuration.cycle_start_date:
+                messages.append(
+                    error(
+                        rules.RULE_CROSS_WEEK,
+                        "Poprzedni przydział graniczny musi przypadać przed horyzontem.",
+                        educator_id=item.educator_id,
+                        required=f"data < {configuration.cycle_start_date}",
+                        actual=previous.date,
+                    )
+                )
+            if following is not None and following.date < horizon_end:
+                messages.append(
+                    error(
+                        rules.RULE_CROSS_WEEK,
+                        "Następny przydział graniczny musi przypadać po horyzoncie.",
+                        educator_id=item.educator_id,
+                        required=f"data >= {horizon_end}",
+                        actual=following.date,
+                    )
+                )
 
     substitute_keys: Counter[tuple[object, ...]] = Counter()
     for item in configuration.weekend_variants:
@@ -553,6 +707,112 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
                     context={"key": [str(value) for value in key]},
                 )
             )
+    for variant in (
+        item
+        for item in configuration.weekend_variants
+        if item.variant_kind == WeekendVariantKind.SUBSTITUTE
+    ):
+        working = variant_working_educators(variant)
+        saturday_workers = {
+            item.educator_id
+            for item in variant.saturday_template.assignments
+        }
+        sunday_workers = {
+            item.educator_id
+            for item in variant.sunday_template.assignments
+        }
+        if (
+            len(working) != 2
+            or not working.issubset(set(educator_ids))
+            or saturday_workers != working
+            or sunday_workers != working
+        ):
+            messages.append(
+                error(
+                    rules.RULE_WEEKEND,
+                    "Wariant SUBSTITUTE musi wskazywać tę samą jawną parę aktywnych wychowawców w sobotę i niedzielę.",
+                    required="dokładnie 2 aktywne osoby",
+                    actual=f"{sorted(saturday_workers)} / {sorted(sunday_workers)}",
+                    context={"variantId": variant.id},
+                )
+            )
+        if (
+            variant.off_educator_id is not None
+            and variant.off_educator_id not in set(educator_ids) - working
+        ):
+            messages.append(
+                error(
+                    rules.RULE_WEEKEND,
+                    "Opcjonalna osoba wolna w SUBSTITUTE musi być aktywna i nie może należeć do pary pracującej.",
+                    actual=variant.off_educator_id,
+                    context={"variantId": variant.id},
+                )
+            )
+        if len(educator_ids) == 3 and (
+            len(set(educator_ids) - working) != 1
+            or variant.off_educator_id
+            != next(iter(set(educator_ids) - working), None)
+        ):
+            messages.append(
+                error(
+                    rules.RULE_WEEKEND,
+                    "Wariant SUBSTITUTE dla trzech osób musi jawnie wskazywać jedyną osobę niepracującą.",
+                    required=next(iter(set(educator_ids) - working), None),
+                    actual=variant.off_educator_id,
+                    context={"variantId": variant.id},
+                )
+            )
+        for template, expected_day in (
+            (variant.saturday_template, WeekendDay.SATURDAY),
+            (variant.sunday_template, WeekendDay.SUNDAY),
+        ):
+            if template.day_of_week != expected_day:
+                messages.append(
+                    error(
+                        rules.RULE_WEEKEND,
+                        "Szablon SUBSTITUTE ma niepoprawny dzień.",
+                        required=expected_day,
+                        actual=template.day_of_week,
+                        context={"variantId": variant.id},
+                    )
+                )
+            ordered = sorted(
+                template.assignments,
+                key=lambda value: value.sequence_number,
+            )
+            sequence = [item.sequence_number for item in ordered]
+            if sequence != list(range(1, len(sequence) + 1)):
+                messages.append(
+                    error(
+                        rules.RULE_WEEKEND,
+                        "sequenceNumber w SUBSTITUTE musi być ciągły od 1.",
+                        required=list(range(1, len(sequence) + 1)),
+                        actual=sequence,
+                        context={"variantId": variant.id},
+                    )
+                )
+            for assignment in ordered:
+                try:
+                    start = parse_hhmm(assignment.start_time)
+                    end = parse_hhmm(assignment.end_time)
+                    if (
+                        assignment.educator_id not in educator_ids
+                        or start % org.time_step_minutes
+                        or end % org.time_step_minutes
+                        or end - start < org.minimum_segment_minutes
+                    ):
+                        raise TimeDomainError(
+                            "Odcinek SUBSTITUTE wskazuje nieaktywną osobę albo narusza krok 30 minut lub minimum 2 godzin."
+                        )
+                except TimeDomainError as exc:
+                    messages.append(
+                        error(
+                            rules.RULE_WEEKEND,
+                            str(exc),
+                            educator_id=assignment.educator_id,
+                            context={"variantId": variant.id},
+                        )
+                    )
     return messages
 
 
@@ -560,7 +820,7 @@ def _validate_effective_local_boundaries(
     configuration: ScheduleConfiguration,
 ) -> list[DomainMessage]:
     messages: list[DomainMessage] = []
-    for day_index in range(42):
+    for day_index in range(configuration.planning_horizon_weeks * 7):
         target_date = configuration.cycle_start_date + timedelta(days=day_index)
         week_number = day_index // 7 + 1
         try:
@@ -601,7 +861,7 @@ def _weekly_balance(
         (item.educator_id, item.week_number): item.assigned_minutes
         for item in configuration.assignment_overrides
     }
-    for week_number in range(1, 7):
+    for week_number in range(1, configuration.planning_horizon_weeks + 1):
         days = [item for item in care if item.week_number == week_number]
         required = sum(item.total_required_minutes for item in days)
         educator_minutes = {
@@ -610,6 +870,7 @@ def _weekly_balance(
                 educator.base_weekly_assigned_minutes,
             )
             for educator in configuration.educators
+            if educator.active
         }
         assigned = sum(educator_minutes.values())
         balance = {
@@ -641,7 +902,7 @@ def _weekend_compatibility(
 ) -> list[DomainMessage]:
     messages: list[DomainMessage] = []
     by_date = {item.date: item for item in care}
-    for week_number in range(1, 7):
+    for week_number in range(1, configuration.planning_horizon_weeks + 1):
         saturday = configuration.cycle_start_date + timedelta(days=(week_number - 1) * 7 + 5)
         sunday = saturday + timedelta(days=1)
         try:
@@ -723,6 +984,33 @@ def validate_configuration(
     balances, balance_messages = _weekly_balance(configuration, care)
     messages.extend(balance_messages)
     messages.extend(_weekend_compatibility(configuration, care))
+    if configuration.schedule_boundary_mode == ScheduleBoundaryMode.FINITE:
+        contexts = (
+            {
+                item.educator_id: item
+                for item in configuration.boundary_context.educators
+            }
+            if configuration.boundary_context is not None
+            else {}
+        )
+        incomplete = [
+            educator.id
+            for educator in configuration.educators
+            if educator.active
+            and (
+                educator.id not in contexts
+                or contexts[educator.id].last_assignment_before is None
+                or contexts[educator.id].first_assignment_after is None
+            )
+        ]
+        if incomplete:
+            messages.append(
+                warning(
+                    rules.RULE_CROSS_WEEK,
+                    "Tryb skończony nie ma pełnego kontekstu przydziałów przed i po horyzoncie; walidacja odpoczynku na tej granicy jest ograniczona.",
+                    actual=", ".join(incomplete),
+                )
+            )
     if configuration.requested_operation_mode == OperationMode.DEMONSTRATION:
         messages.append(
             warning(

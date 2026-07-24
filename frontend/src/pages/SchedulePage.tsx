@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   DAY_NAMES,
@@ -17,6 +17,14 @@ export function SchedulePage() {
   const { configuration, generation, generate, busy } = useAppState();
   const [week, setWeek] = useState(1);
   const [view, setView] = useState<"week" | "educator">("week");
+  useEffect(() => {
+    if (
+      configuration &&
+      week > configuration.planningHorizonWeeks
+    ) {
+      setWeek(configuration.planningHorizonWeeks);
+    }
+  }, [configuration, week]);
 
   const weekDates = useMemo(() => {
     if (!configuration) return [];
@@ -115,7 +123,7 @@ export function SchedulePage() {
     <>
       <PageHeader
         eyebrow="KROK 08 · WYNIK"
-        title="Sześciotygodniowy harmonogram"
+        title={`Harmonogram: ${configuration.planningHorizonWeeks} tyg.`}
         description="Każdy odcinek pochodzi z wyniku zatwierdzonego przez niezależny walidator."
         actions={
           <button
@@ -138,12 +146,16 @@ export function SchedulePage() {
           <StatusBadge value={generation.publicResult} />
         </div>
         <div>
-          <small>Odcinki w cyklu</small>
+          <small>Odcinki w horyzoncie</small>
           <strong>{generation.assignments.length}</strong>
         </div>
         <div>
           <small>Wynik preferencji</small>
           <strong>{generation.objective?.objectiveScore ?? "—"}</strong>
+        </div>
+        <div>
+          <small>Następna pozycja weekendu</small>
+          <strong>{generation.nextWeekendVariant ?? "—"}</strong>
         </div>
         <div className="segmented-control" aria-label="Rodzaj widoku">
           <button
@@ -163,7 +175,10 @@ export function SchedulePage() {
         </div>
       </section>
       <div className="week-tabs" aria-label="Wybór tygodnia">
-        {[1, 2, 3, 4, 5, 6].map((value) => (
+        {Array.from(
+          { length: configuration.planningHorizonWeeks },
+          (_, index) => index + 1,
+        ).map((value) => (
           <button
             key={value}
             type="button"
@@ -183,7 +198,9 @@ export function SchedulePage() {
               <header>
                 <span>{DAY_NAMES[dayIndex]}</span>
                 <strong>{date.slice(8, 10)}</strong>
-                <small>{date.slice(5, 7)}.2026</small>
+                <small>
+                  {date.slice(5, 7)}.{date.slice(0, 4)}
+                </small>
               </header>
               <div>
                 {assignments

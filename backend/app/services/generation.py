@@ -15,11 +15,16 @@ from app.services.reports import error, info
 from app.solver.schedule_solver import solve_schedule
 from app.validation.input_validation import validate_configuration
 from app.validation.schedule_validator import validate_schedule
+from app.services.weekend import expected_weekend_position
 
 
 def generate_schedule(
     configuration: ScheduleConfiguration,
 ) -> GenerateResponse:
+    next_weekend_variant = expected_weekend_position(
+        configuration.starting_weekend_variant,
+        configuration.planning_horizon_weeks + 1,
+    )
     input_report = validate_configuration(configuration)
     if input_report.status != InputStatus.VALID_INPUT:
         return GenerateResponse(
@@ -27,6 +32,7 @@ def generate_schedule(
             public_result=PublicResult.DANE_NIEPOPRAWNE,
             care=input_report.care,
             messages=input_report.messages,
+            next_weekend_variant=next_weekend_variant,
         )
 
     solver_result = solve_schedule(configuration, input_report.care)
@@ -68,6 +74,7 @@ def generate_schedule(
                     context={"solverStatus": solver_result.solver_status_name},
                 )
             ],
+            next_weekend_variant=next_weekend_variant,
         )
     if solver_result.status == GenerationStatus.TIME_LIMIT:
         return GenerateResponse(
@@ -81,6 +88,7 @@ def generate_schedule(
                     context={"solverStatus": solver_result.solver_status_name},
                 )
             ],
+            next_weekend_variant=next_weekend_variant,
         )
 
     validation = validate_schedule(
@@ -96,6 +104,7 @@ def generate_schedule(
             care=input_report.care,
             validation_report=validation,
             messages=validation.messages,
+            next_weekend_variant=next_weekend_variant,
         )
     objective = calculate_objective(
         configuration,
@@ -110,4 +119,5 @@ def generate_schedule(
         objective=objective,
         validation_report=validation,
         messages=[*input_report.messages, *validation.messages],
+        next_weekend_variant=next_weekend_variant,
     )

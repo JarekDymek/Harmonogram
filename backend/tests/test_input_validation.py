@@ -17,8 +17,8 @@ def rule_ids(response):
 def test_complete_demo_input_is_valid(demo_config):
     response = validate_configuration(demo_config)
     assert response.status == InputStatus.VALID_INPUT
-    assert len(response.care) == 42
-    assert [item["differenceMinutes"] for item in response.weekly_balance] == [0] * 6
+    assert len(response.care) == 7
+    assert [item["differenceMinutes"] for item in response.weekly_balance] == [0]
 
 
 def test_duplicate_approved_plan_is_rejected(demo_config):
@@ -69,7 +69,27 @@ def test_unverified_profile_blocks_production(demo_config):
 
 
 def test_specific_date_overrides_base_plan(demo_config):
+    special_date = demo_config.cycle_start_date + timedelta(days=2)
+    base = next(
+        item
+        for item in demo_config.day_plans
+        if item.scope == PlanScope.BASE_WEEKLY and item.day_of_week == 2
+    )
+    special = base.model_copy(
+        deep=True,
+        update={
+            "id": "PLAN-SPECIAL-FIRST-WEEK",
+            "scope": PlanScope.SPECIFIC_DATE,
+            "day_of_week": None,
+            "date": special_date,
+        },
+    )
+    special.no_care_intervals[0].end_time = "15:00"
+    demo_config.day_plans.append(special)
+    demo_config.educators[2].base_weekly_assigned_minutes -= 60
     response = validate_configuration(demo_config)
-    special = next(item for item in response.care if item.week_number == 2 and item.day_of_week == 2)
-    assert special.applied_day_plan_id == "PLAN-SPECIAL-2026-09-23"
-    assert special.total_required_minutes == 540
+    calculated = next(
+        item for item in response.care if item.date == special_date
+    )
+    assert calculated.applied_day_plan_id == "PLAN-SPECIAL-FIRST-WEEK"
+    assert calculated.total_required_minutes == 540

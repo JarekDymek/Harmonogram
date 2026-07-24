@@ -11,6 +11,7 @@ from app.models.schemas import (
     CalculatedCareDay,
     GenerationStatus,
     ScheduleConfiguration,
+    ScheduleBoundaryMode,
     UnavailabilityScope,
     UnavailabilityType,
     WeeklyRestWindowType,
@@ -113,11 +114,13 @@ def _candidate_rest_variables(
     minimum_minutes: int,
     label: str,
     window_number: int,
+    total_days: int,
+    cyclic: bool,
 ) -> list[RestCandidate]:
     """Zwraca wskaźniki możliwych, rzeczywistych okresów bez pracy."""
     step = configuration.organizational_rules.time_step_minutes
     minimum_slots = ceil(minimum_minutes / step)
-    total_cycle_slots = rules.CYCLE_DAYS * rules.SLOTS_PER_DAY
+    total_cycle_slots = total_days * rules.SLOTS_PER_DAY
     candidates: list[RestCandidate] = []
     for start in range(window_start, window_end + 1):
         end = start + minimum_slots
@@ -130,8 +133,10 @@ def _candidate_rest_variables(
             continue
         occupied = []
         for absolute_slot in range(start, end):
+            if not cyclic and not 0 <= absolute_slot < total_cycle_slots:
+                continue
             day_index, slot = divmod(
-                absolute_slot % total_cycle_slots,
+                absolute_slot % total_cycle_slots if cyclic else absolute_slot,
                 rules.SLOTS_PER_DAY,
             )
             occupied.append(x[(educator_index, day_index, slot)])
@@ -155,10 +160,12 @@ def _add_weekly_rest(
     x: dict[tuple[int, int, int], cp_model.IntVar],
     configuration: ScheduleConfiguration,
     educator_count: int,
+    total_days: int,
+    cyclic: bool,
 ) -> list[cp_model.IntVar]:
     legal = configuration.legal_rules
     step = configuration.organizational_rules.time_step_minutes
-    cycle_slots = rules.CYCLE_DAYS * rules.SLOTS_PER_DAY
+    cycle_slots = total_days * rules.SLOTS_PER_DAY
     window_slots = legal.weekly_rest_window_length_minutes // step
     window_step_slots = legal.weekly_rest_window_step_minutes // step
     anchor_slot = parse_hhmm(legal.weekly_rest_anchor_time) // step
@@ -179,6 +186,14 @@ def _add_weekly_rest(
     else:
         starts = list(range(first_anchor, cycle_slots, window_step_slots))
         ends = [start + window_slots for start in starts]
+    if not cyclic:
+        finite_windows = [
+            (start, end)
+            for start, end in zip(starts, ends, strict=True)
+            if start >= 0 and end <= cycle_slots
+        ]
+        starts = [start for start, _ in finite_windows]
+        ends = [end for _, end in finite_windows]
 
     exception_used: list[cp_model.IntVar] = []
     for educator_index in range(educator_count):
@@ -198,6 +213,8 @@ def _add_weekly_rest(
                 minimum_minutes=legal.minimum_weekly_rest_minutes,
                 label=f"normal_{window_number}",
                 window_number=window_number,
+                total_days=total_days,
+                cyclic=cyclic,
             )
             selected_rest_candidates.extend(normal)
             normal_variables = [item.variable for item in normal]
@@ -230,6 +247,8 @@ def _add_weekly_rest(
                 minimum_minutes=legal.weekly_rest_exception_minimum_minutes or 0,
                 label=f"exception_{window_number}",
                 window_number=window_number,
+                total_days=total_days,
+                cyclic=cyclic,
             )
             selected_rest_candidates.extend(short)
             short_variables = [item.variable for item in short]
@@ -252,6 +271,8 @@ def _add_weekly_rest(
                     minimum_minutes=legal.weekly_rest_compensation_minutes or 0,
                     label=f"compensation_{window_number}",
                     window_number=window_number,
+                    total_days=total_days,
+                    cyclic=cyclic,
                 )
                 selected_rest_candidates.extend(compensation)
                 compensation_variables = [
@@ -307,6 +328,11 @@ def solve_schedule(
 ) -> SolverResult:
     model = cp_model.CpModel()
     educators = [item for item in configuration.educators if item.active]
+    total_days = configuration.planning_horizon_weeks * 7
+    total_weeks = configuration.planning_horizon_weeks
+    cyclic = (
+        configuration.schedule_boundary_mode == ScheduleBoundaryMode.CYCLIC
+    )
     step = configuration.organizational_rules.time_step_minutes
     minimum_segment_slots = (
         configuration.organizational_rules.minimum_segment_minutes // step
@@ -327,7 +353,7 @@ def solve_schedule(
                     f"x_{educator_index}_{day_index}_{slot}"
                 )
 
-    for day_index in range(rules.CYCLE_DAYS):
+    for day_index in range(total_days):
         for slot in range(rules.SLOTS_PER_DAY):
             variables = [
                 x[(educator_index, day_index, slot)]
@@ -339,7 +365,7 @@ def solve_schedule(
                 model.add(sum(variables) == 0)
 
     for educator_index in range(len(educators)):
-        for day_index in range(rules.CYCLE_DAYS):
+        for day_index in range(total_days):
             day_variables = [
                 x[(educator_index, day_index, slot)]
                 for slot in range(rules.SLOTS_PER_DAY)
@@ -373,7 +399,7 @@ def solve_schedule(
                     )
 
     for educator_index, educator in enumerate(educators):
-        for week_index in range(rules.CYCLE_WEEKS):
+        for week_index in range(total_weeks):
             day_indexes = range(week_index * 7, (week_index + 1) * 7)
             model.add(
                 sum(works_day[(educator_index, day)] for day in day_indexes)
@@ -421,7 +447,7 @@ def solve_schedule(
     educator_index_by_id = {
         educator.id: index for index, educator in enumerate(educators)
     }
-    for week_number in range(1, rules.CYCLE_WEEKS + 1):
+    for week_number in range(1, total_weeks + 1):
         saturday_index = (week_number - 1) * 7 + 5
         saturday = care[saturday_index].date
         sunday = care[saturday_index + 1].date
@@ -452,7 +478,7 @@ def solve_schedule(
         configuration.legal_rules.maximum_absolute_segment_minutes
     )
     for educator_index in range(len(educators)):
-        for day_index in range(rules.CYCLE_DAYS):
+        for day_index in range(total_days):
             if maximum_daily is not None:
                 model.add(
                     sum(
@@ -475,13 +501,14 @@ def solve_schedule(
 
     minimum_daily_rest = configuration.legal_rules.minimum_daily_rest_minutes
     for educator_index in range(len(educators)):
-        for day_index in range(rules.CYCLE_DAYS):
-            next_day_index = (day_index + 1) % rules.CYCLE_DAYS
+        transition_count = total_days if cyclic else total_days - 1
+        for day_index in range(transition_count):
+            next_day_index = (day_index + 1) % total_days
             current_date = care[day_index].date
             next_date = (
                 care[next_day_index].date
                 if next_day_index
-                else configuration.cycle_start_date + timedelta(days=rules.CYCLE_DAYS)
+                else configuration.cycle_start_date + timedelta(days=total_days)
             )
             for current_slot in care_slots_by_day[day_index]:
                 end_minute = (current_slot + 1) * step
@@ -500,11 +527,50 @@ def solve_schedule(
                             <= 1
                         )
 
+    if not cyclic and configuration.boundary_context is not None:
+        context_by_educator = {
+            item.educator_id: item
+            for item in configuration.boundary_context.educators
+        }
+        for educator_index, educator in enumerate(educators):
+            context = context_by_educator.get(educator.id)
+            if context is None:
+                continue
+            if context.last_assignment_before is not None:
+                previous = context.last_assignment_before
+                for slot in care_slots_by_day[0]:
+                    rest = elapsed_minutes(
+                        previous.date,
+                        previous.end_minute,
+                        care[0].date,
+                        slot * step,
+                        configuration.time_zone_id,
+                    )
+                    if rest < minimum_daily_rest:
+                        model.add(x[(educator_index, 0, slot)] == 0)
+            if context.first_assignment_after is not None:
+                following = context.first_assignment_after
+                last_day_index = total_days - 1
+                for slot in care_slots_by_day[last_day_index]:
+                    rest = elapsed_minutes(
+                        care[last_day_index].date,
+                        (slot + 1) * step,
+                        following.date,
+                        following.start_minute,
+                        configuration.time_zone_id,
+                    )
+                    if rest < minimum_daily_rest:
+                        model.add(
+                            x[(educator_index, last_day_index, slot)] == 0
+                        )
+
     exception_variables = _add_weekly_rest(
         model=model,
         x=x,
         configuration=configuration,
         educator_count=len(educators),
+        total_days=total_days,
+        cyclic=cyclic,
     )
 
     org = configuration.organizational_rules
@@ -533,13 +599,13 @@ def solve_schedule(
         )
         - works_day[(educator_index, day_index)]
         for educator_index in range(len(educators))
-        for day_index in range(rules.CYCLE_DAYS)
+        for day_index in range(total_days)
     ]
 
     preferred_segment_slots = org.preferred_maximum_segment_minutes // step
     long_terms = []
     for educator_index in range(len(educators)):
-        for day_index in range(rules.CYCLE_DAYS):
+        for day_index in range(total_days):
             for slot in range(preferred_segment_slots, rules.SLOTS_PER_DAY):
                 window = [
                     x[(educator_index, day_index, position)]

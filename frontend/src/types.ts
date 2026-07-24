@@ -92,7 +92,7 @@ export interface WeekendVariant {
   applicableWeekNumber?: number | null;
   applicableSaturdayDate?: string | null;
   applicableSundayDate?: string | null;
-  offEducatorId: string;
+  offEducatorId?: string | null;
   approved: boolean;
   approvalReference: string;
   approvedAt: string;
@@ -153,6 +153,7 @@ export interface OrganizationalRules {
 }
 
 export interface ScheduleConfiguration {
+  schemaVersion: number;
   projectId: string;
   projectName: string;
   configurationVersionId: string;
@@ -162,8 +163,11 @@ export interface ScheduleConfiguration {
   cycleStartDate: string;
   weekStartDay: string;
   timeZoneId: string;
-  cycleLengthWeeks: number;
-  cycleIsRepeating: boolean;
+  educatorCount: 3 | 4;
+  planningHorizonWeeks: number;
+  scheduleBoundaryMode: "FINITE" | "CYCLIC";
+  cycleLengthWeeks?: number | null;
+  cycleIsRepeating?: boolean | null;
   startingWeekendVariant: number;
   requestedOperationMode: "PRODUCTION" | "DEMONSTRATION";
   educators: Educator[];
@@ -173,6 +177,21 @@ export interface ScheduleConfiguration {
   legalRules: LegalRules;
   organizationalRules: OrganizationalRules;
   weekendVariants: WeekendVariant[];
+  boundaryContext?: {
+    educators: Array<{
+      educatorId: string;
+      lastAssignmentBefore?: {
+        date: string;
+        startMinute: number;
+        endMinute: number;
+      } | null;
+      firstAssignmentAfter?: {
+        date: string;
+        startMinute: number;
+        endMinute: number;
+      } | null;
+    }>;
+  } | null;
   solverTimeLimitSeconds: number;
   randomSeed: number;
   demonstrationNotice?: string | null;
@@ -272,4 +291,5 @@ export interface GenerateResponse {
   validationReport?: ValidationReport | null;
   conflictReport?: ConflictReport | null;
   messages: DomainMessage[];
+  nextWeekendVariant?: number | null;
 }
