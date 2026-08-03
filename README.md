@@ -1,8 +1,9 @@
 # Harmonogram MOW
 
-Responsywna aplikacja webowa do generowania harmonogramu pracy trzech albo
-czterech wychowawców jednej grupy internatu Młodzieżowego Ośrodka
-Wychowawczego, dla horyzontu od jednego do sześciu tygodni.
+Responsywna aplikacja webowa do wspólnego generowania harmonogramu od jednej
+do ośmiu grup internatu Młodzieżowego Ośrodka Wychowawczego, dla horyzontu od
+jednego do sześciu tygodni. Każda grupa ma trzech wychowawców podstawowych oraz
+opcjonalnego czwartego wychowawcę uzupełniającego.
 
 Backend waliduje dane, oblicza zapotrzebowanie dla wybranego zakresu i buduje model
 ograniczeń OR-Tools CP-SAT. Znaleziony kandydat jest publikowany dopiero po
@@ -32,7 +33,12 @@ pola oznacza API dostępne pod tym samym adresem.
 
 ## Najważniejsze funkcje
 
-- jedna grupa i dokładnie trzech albo czterech aktywnych wychowawców;
+- od 1 do 8 grup z osobnymi planami, wyjątkami i wzorcami weekendowymi;
+- globalny rejestr wychowawców i członkostwa `PRIMARY` / `SUPPORT`;
+- jedna osoba może pracować w kilku grupach, ale nigdy jednocześnie;
+- globalne liczenie odpoczynków, dni pracy, niedostępności i godzin;
+- osobny widok aktywnej grupy i tabelaryczny widok całego internatu;
+- zablokowane dyżury nocne oraz grupowe dyżury w stołówce;
 - horyzont 1–6 tygodni, rozpoczynający się w poniedziałek;
 - granice w trybie skończonym albo cyklicznym (cykl tylko dla 6 tygodni);
 - półgodzinowy model czasu i odcinki o długości co najmniej 120 minut;
@@ -51,6 +57,10 @@ pola oznacza API dostępne pod tym samym adresem.
 - tygodniowy i osobowy widok harmonogramu na komputerze i telefonie;
 - wersjonowany lokalny zapis konfiguracji, wyniku i raportu w `localStorage`;
 - interfejs godzinowy z obsługą polskiego przecinka i krokiem 0,5 godziny.
+- twardy zakaz powrotu `A–B–A` w jednym ciągłym bloku opieki;
+- równoważna optymalizacja leksykograficzna: dni dzielone, przekazania,
+  liczba osób, odcinki, `PREFERRED`, długość i godzina przekazania;
+- kanoniczne scalanie sąsiadujących slotów i tygodniowy raport jakości.
 
 ## Wymagania
 
@@ -155,7 +165,7 @@ backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --por
 4. Po uzyskaniu `VALID_INPUT` wybierz **Generuj harmonogram**.
 5. Otwórz **Raport walidacji**.
 
-Fixture zawiera:
+Demonstracja zawiera:
 
 - grupę demonstracyjną i osoby A, B, C;
 - cykl od poniedziałku `2026-09-14`;
@@ -168,10 +178,11 @@ Fixture zawiera:
 - testowe wartości odpoczynków 11 i 35 godzin;
 - profil `UNVERIFIED` i tryb `DEMONSTRATION`.
 
-Fixture jest wykonalny. Generuje 123 ciągłe odcinki, zachowuje weekendy 1:1 i
-kończy się wynikiem `POPRAWNY_TRYB_DEMONSTRACYJNY` oraz raportem `VALID`.
-Liczba odcinków jest deterministyczna dla zapisanej wersji fixture, parametrów
-solvera i wersji OR-Tools.
+Demonstracja jest wykonalna, kończy się wynikiem
+`POPRAWNY_TRYB_DEMONSTRACYJNY` oraz raportem `VALID`. Repozytorium zawiera też
+znormalizowany fixture rzeczywistego tygodnia 42 z 2026 r.: osiem grup, 156
+odcinków grupowych, osiem dyżurów nocnych i siedem dyżurów stołówkowych. Sposób
+odczytu opisuje `docs/INTERPRETACJA_HARMONOGRAMU_REFERENCYJNEGO.md`.
 
 ## API
 
@@ -219,7 +230,7 @@ npm.cmd --prefix frontend run build:pages
 ```
 
 Build instalatora jest wykonywany na runnerze Windows przez workflow
-`.github/workflows/release-windows.yml`. Tag w formacie `v1.2.0` tworzy
+`.github/workflows/release-windows.yml`. Tag w formacie `v1.3.0` tworzy
 wydanie GitHub Release i dołącza gotowy `Harmonogram-MOW-Setup.exe`.
 
 Zestaw backendowy obejmuje poziomy `INPUT_VALIDATION`, `CALCULATOR_UNIT`,
@@ -259,16 +270,21 @@ zapotrzebowaniem, błąd pola pochodnego, deterministyczność i limit czasu.
 Aktywne dokumenty wymagań pozostają w głównym katalogu repozytorium.
 Historyczne raporty spójności nie zostały zmodyfikowane przez implementację.
 
-## Ograniczenia V1
+## Rzeczywiste ograniczenia
 
-- dokładnie jedna grupa i trzy osoby, bez rezerwy i puli międzygrupowej;
 - brak bazy danych, kont użytkowników, uprawnień i pracy wielostanowiskowej;
 - konfiguracja i wyniki są przechowywane w przeglądarce;
 - brak importu/eksportu JSON w interfejsie;
 - brak automatycznego tworzenia zastępstw i wariantów weekendowych;
 - raport konfliktu solvera ma jawnie oznaczoną jakość `APPROXIMATE` i nie
   deklaruje minimalnego rdzenia sprzeczności;
-- wynik nie jest publikowany po limicie czasu, nawet jeśli solver znalazł
-  nieudowodnionego kandydata;
+- solver najpierw znajduje kandydata spełniającego wszystkie reguły twarde,
+  a następnie optymalizuje go leksykograficznie; jeżeli limit przerwie dowód
+  optymalności, poprawny kandydat jest publikowany z oznaczeniem
+  `NAJLEPSZA ZNALEZIONA`, nie jako optimum udowodnione;
+- automatyczne układanie dyżurów nocnych nie jest jeszcze wykonywane — są one
+  wprowadzane ręcznie jako zablokowane zajęcia;
+- dyżur stołówkowy jest obecnie informacyjnym przydziałem grupy bez godzin
+  konkretnej osoby;
 - prawdziwe użycie wymaga zastąpienia danych demonstracyjnych zatwierdzonymi
   danymi placówki oraz profilem prawnym `VERIFIED`.

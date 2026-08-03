@@ -53,8 +53,8 @@ export function StartPage() {
     <>
       <PageHeader
         eyebrow="GENERATOR HARMONOGRAMU"
-        title="Od jednego do sześciu tygodni. Trzy albo cztery osoby."
-        description="Skonfiguruj zapotrzebowanie, zatwierdzone weekendy i ograniczenia. Aplikacja wygeneruje wyłącznie harmonogram zgodny ze wszystkimi regułami krytycznymi."
+        title="Od jednej do ośmiu grup. Jeden wspólny harmonogram internatu."
+        description="Skonfiguruj grupy, globalny zespół, zatwierdzone weekendy i ograniczenia. Aplikacja wygeneruje wyłącznie harmonogram zgodny ze wszystkimi regułami krytycznymi."
       />
       <section className="hero-grid">
         <article className="action-card action-card--primary">
@@ -108,8 +108,8 @@ export function StartPage() {
           </div>
           <div className="metric-grid">
             <div className="metric">
-              <small>Grupa</small>
-              <strong>{configuration.groupName}</strong>
+              <small>Grupy</small>
+              <strong>{configuration.groupCount} · aktywna {configuration.groupName}</strong>
             </div>
             <div className="metric">
               <small>Początek cyklu</small>

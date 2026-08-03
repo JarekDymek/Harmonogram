@@ -22,7 +22,7 @@ from app.models.schemas import (
     WeeklyRestWindowType,
     WorkAssignment,
 )
-from app.services.objective import calculate_objective
+from app.services.objective import calculate_objective, canonicalize_assignments
 from app.services.reports import error, warning
 from app.services.time_utils import (
     TimeDomainError,
@@ -105,6 +105,7 @@ def calculate_care_independently(
         pairs = subtract_pairs(operating, no_care)
         result.append(
             CalculatedCareDay(
+                group_id=configuration.group_id or "",
                 date=target_date,
                 week_number=week_number,
                 day_of_week=target_date.weekday(),
@@ -485,12 +486,26 @@ def _daily_rest_messages(
                 by_date[item.date].append(item)
         work_dates = sorted(by_date)
         for previous_date, next_date in zip(work_dates, work_dates[1:]):
+            previous_end = max(
+                item.end_minute for item in by_date[previous_date]
+            )
+            next_start = min(
+                item.start_minute for item in by_date[next_date]
+            )
+            # Jedna służba przechodząca przez północ jest ciągłą pracą, a nie
+            # dwiema zmianami, między którymi należałoby zapewnić odpoczynek.
+            if (
+                next_date == previous_date + timedelta(days=1)
+                and previous_end == 1440
+                and next_start == 0
+            ):
+                continue
             append_if_short(
                 educator.id,
                 previous_date,
-                max(item.end_minute for item in by_date[previous_date]),
+                previous_end,
                 next_date,
-                min(item.start_minute for item in by_date[next_date]),
+                next_start,
                 boundary=False,
             )
         if cyclic and work_dates:
@@ -1035,11 +1050,283 @@ def _absolute_limits_messages(
     return messages
 
 
+def _external_as_assignments(
+    configuration: ScheduleConfiguration,
+) -> list[WorkAssignment]:
+    result = list(configuration.locked_assignments)
+    zone = configuration.time_zone_id
+    for duty in configuration.external_duty_assignments:
+        if not duty.locked:
+            continue
+        start = duty.start_date_time
+        end = duty.end_date_time
+        current_date = start.date()
+        while current_date <= end.date():
+            start_minute = (
+                start.hour * 60 + start.minute
+                if current_date == start.date()
+                else 0
+            )
+            end_minute = (
+                end.hour * 60 + end.minute
+                if current_date == end.date()
+                else 1440
+            )
+            if end_minute > start_minute:
+                # Konwersja granic jest wykonywana ponownie, niezależnie od solvera.
+                aware_local_datetime(current_date, start_minute, zone)
+                aware_local_datetime(current_date, end_minute, zone)
+                result.append(
+                    WorkAssignment(
+                        group_id="EXTERNAL",
+                        educator_id=duty.educator_id,
+                        date=current_date,
+                        start_minute=start_minute,
+                        end_minute=end_minute,
+                    )
+                )
+            current_date += timedelta(days=1)
+    return result
+
+
+def _no_return_messages(
+    care: list[CalculatedCareDay],
+    assignments: list[WorkAssignment],
+) -> list[DomainMessage]:
+    messages: list[DomainMessage] = []
+    canonical = canonicalize_assignments(assignments)
+    by_group_date: dict[tuple[str, date], list[WorkAssignment]] = defaultdict(list)
+    for item in canonical:
+        by_group_date[(item.group_id, item.date)].append(item)
+    for day in care:
+        for interval in day.intervals:
+            segments = sorted(
+                [
+                    item
+                    for item in by_group_date[(day.group_id, day.date)]
+                    if item.start_minute < interval.end_minute
+                    and interval.start_minute < item.end_minute
+                ],
+                key=lambda item: (item.start_minute, item.end_minute),
+            )
+            sequence = [item.educator_id for item in segments]
+            seen: set[str] = set()
+            previous: str | None = None
+            for educator_id in sequence:
+                if educator_id in seen and educator_id != previous:
+                    messages.append(
+                        error(
+                            rules.RULE_NO_RETURN_WITHIN_BLOCK,
+                            "Wychowawca wraca po odcinku innej osoby w tym samym ciągłym bloku opieki.",
+                            group_id=day.group_id,
+                            educator_id=educator_id,
+                            date_value=day.date,
+                            start_time=format_hhmm(interval.start_minute),
+                            end_time=format_hhmm(interval.end_minute),
+                            required="każda osoba najwyżej w jednym ciągu",
+                            actual="–".join(sequence),
+                        )
+                    )
+                    break
+                seen.add(educator_id)
+                previous = educator_id
+    return messages
+
+
+def _cross_group_messages(
+    configuration: ScheduleConfiguration,
+    assignments: list[WorkAssignment],
+) -> list[DomainMessage]:
+    messages: list[DomainMessage] = []
+    all_assignments = canonicalize_assignments(
+        [*assignments, *_external_as_assignments(configuration)]
+    )
+    by_educator: dict[str, list[WorkAssignment]] = defaultdict(list)
+    for item in all_assignments:
+        by_educator[item.educator_id].append(item)
+    for educator_id, values in by_educator.items():
+        ordered = sorted(
+            values,
+            key=lambda item: (
+                item.date,
+                item.start_minute,
+                item.end_minute,
+                item.group_id,
+            ),
+        )
+        for first_index, first in enumerate(ordered):
+            for second in ordered[first_index + 1 :]:
+                if second.date > first.date:
+                    break
+                if second.start_minute >= first.end_minute:
+                    break
+                messages.append(
+                    error(
+                        rules.RULE_CROSS_GROUP_NO_OVERLAP,
+                        "Wychowawca ma nakładające się przydziały w grupach albo dyżurach.",
+                        educator_id=educator_id,
+                        date_value=first.date,
+                        start_time=format_hhmm(
+                            max(first.start_minute, second.start_minute)
+                        ),
+                        end_time=format_hhmm(
+                            min(first.end_minute, second.end_minute)
+                        ),
+                        actual=f"{first.group_id} + {second.group_id}",
+                    )
+                )
+
+    rest_messages = [
+        *_daily_rest_messages(configuration, all_assignments),
+        *_weekly_rest_messages(configuration, all_assignments),
+    ]
+    for item in rest_messages:
+        messages.append(
+            item.model_copy(
+                update={
+                    "rule_id": rules.RULE_CROSS_GROUP_REST,
+                    "context": {
+                        **item.context,
+                        "relatedRuleId": item.rule_id,
+                    },
+                }
+            )
+        )
+
+    required_days = configuration.organizational_rules.required_work_days_per_week
+    relevant_ids = {
+        item.educator_id
+        for item in configuration.group_memberships
+        if item.active and item.group_id in set(configuration.selected_group_ids)
+    }
+    for educator_id in relevant_ids:
+        for week_number in range(1, configuration.planning_horizon_weeks + 1):
+            start = configuration.cycle_start_date + timedelta(
+                days=(week_number - 1) * 7
+            )
+            end = start + timedelta(days=7)
+            days = {
+                item.date
+                for item in all_assignments
+                if item.educator_id == educator_id and start <= item.date < end
+            }
+            if len(days) != required_days:
+                messages.append(
+                    error(
+                        rules.RULE_DAYS,
+                        "Globalna liczba dni pracy wychowawcy we wszystkich grupach nie wynosi pięć.",
+                        educator_id=educator_id,
+                        date_value=start,
+                        required=required_days,
+                        actual=len(days),
+                        context={"weekNumber": week_number},
+                    )
+                )
+    return messages
+
+
+def _validate_internat_schedule(
+    configuration: ScheduleConfiguration,
+    assignments: list[WorkAssignment],
+    calculated_care: list[CalculatedCareDay] | None,
+) -> ValidationReport:
+    active_groups = configuration.active_groups()
+    sole_group_id = active_groups[0].id if len(active_groups) == 1 else None
+    normalized_assignments = [
+        (
+            item.model_copy(update={"group_id": sole_group_id})
+            if not item.group_id and sole_group_id is not None
+            else item
+        )
+        for item in assignments
+    ]
+    canonical = canonicalize_assignments(normalized_assignments)
+    messages: list[DomainMessage] = []
+    independent_care: list[CalculatedCareDay] = []
+    for group in active_groups:
+        group_configuration = configuration.configuration_for_group(group.id)
+        group_assignments = [
+            item for item in canonical if item.group_id == group.id
+        ]
+        supplied = (
+            [
+                item for item in calculated_care if item.group_id == group.id
+            ]
+            if calculated_care is not None
+            else None
+        )
+        report = validate_schedule(
+            group_configuration,
+            group_assignments,
+            supplied,
+        )
+        independent_care.extend(calculate_care_independently(group_configuration))
+        use_global_work_rules = (
+            len(active_groups) > 1
+            or bool(configuration.external_duty_assignments)
+            or bool(configuration.locked_assignments)
+        )
+        ignored_global_rules = (
+            {
+                rules.RULE_DAYS,
+                rules.RULE_REST_DAILY,
+                rules.RULE_REST_WEEKLY,
+                rules.RULE_CROSS_WEEK,
+            }
+            if use_global_work_rules
+            else set()
+        )
+        for message in report.messages:
+            if message.rule_id in ignored_global_rules:
+                continue
+            messages.append(
+                message
+                if message.group_id is not None
+                else message.model_copy(update={"group_id": group.id})
+            )
+
+    messages.extend(_no_return_messages(independent_care, canonical))
+    messages.extend(_cross_group_messages(configuration, canonical))
+    objective = calculate_objective(configuration, independent_care, canonical)
+    has_errors = any(item.severity == "ERROR" for item in messages)
+    if has_errors:
+        public_result = PublicResult.BLAD_WEWNETRZNY
+    elif configuration.requested_operation_mode == OperationMode.DEMONSTRATION:
+        public_result = PublicResult.POPRAWNY_TRYB_DEMONSTRACYJNY
+    else:
+        public_result = PublicResult.POPRAWNY
+    relevant_date = configuration.legal_rules.effective_to
+    if relevant_date is None and configuration.legal_rules.verified_at is not None:
+        relevant_date = configuration.legal_rules.verified_at.date()
+    return ValidationReport(
+        status=ValidationStatus.INVALID if has_errors else ValidationStatus.VALID,
+        public_result=public_result,
+        messages=messages,
+        objective=objective,
+        legal_profile_status=configuration.legal_rules.verification_status,
+        legal_profile_version=configuration.legal_rules.version,
+        legal_profile_relevant_date=relevant_date,
+        demonstration_use_prohibited_notice=(
+            "WYŁĄCZNIE DEMONSTRACJA — wynik nie jest dopuszczony do rzeczywistego użycia."
+            if configuration.requested_operation_mode == OperationMode.DEMONSTRATION
+            else None
+        ),
+    )
+
+
 def validate_schedule(
     configuration: ScheduleConfiguration,
     assignments: list[WorkAssignment],
     calculated_care: list[CalculatedCareDay] | None = None,
 ) -> ValidationReport:
+    if len(configuration.groups) > 1 or any(
+        item.group_id is None for item in configuration.educators
+    ):
+        return _validate_internat_schedule(
+            configuration,
+            assignments,
+            calculated_care,
+        )
     messages: list[DomainMessage] = []
     if configuration.schedule_boundary_mode == ScheduleBoundaryMode.FINITE:
         contexts = (

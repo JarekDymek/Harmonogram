@@ -130,7 +130,7 @@ export function MessagesTable({ messages }: { messages: DomainMessage[] }) {
               </td>
               <td>{message.message}</td>
               <td>
-                {[message.date, message.educatorId, message.startTime]
+                {[message.groupId, message.date, message.educatorId, message.startTime]
                   .filter(Boolean)
                   .join(" · ") || "—"}
               </td>

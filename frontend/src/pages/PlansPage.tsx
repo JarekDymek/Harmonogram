@@ -52,7 +52,13 @@ export function PlansPage() {
 
   useEffect(() => {
     if (configuration) {
-      setPlans(structuredClone(configuration.dayPlans));
+      setPlans(
+        structuredClone(
+          configuration.dayPlans.filter(
+            (item) => item.groupId === configuration.activeGroupId,
+          ),
+        ),
+      );
       exceptionForm.reset({
         scope: "SPECIFIC_DATE",
         weekNumber: 1,
@@ -110,7 +116,15 @@ export function PlansPage() {
   };
 
   const save = () => {
-    setConfiguration({ ...configuration, dayPlans: plans });
+    setConfiguration({
+      ...configuration,
+      dayPlans: [
+        ...configuration.dayPlans.filter(
+          (item) => item.groupId !== configuration.activeGroupId,
+        ),
+        ...plans,
+      ],
+    });
   };
 
   const addException = exceptionForm.handleSubmit((values) => {
@@ -160,7 +174,15 @@ export function PlansPage() {
           existing.dayOfWeek === item.dayOfWeek);
     const next = [...plans.filter((value) => !keyMatches(value)), item];
     setPlans(next);
-    setConfiguration({ ...configuration, dayPlans: next });
+    setConfiguration({
+      ...configuration,
+      dayPlans: [
+        ...configuration.dayPlans.filter(
+          (value) => value.groupId !== configuration.activeGroupId,
+        ),
+        ...next,
+      ],
+    });
   });
 
   return (
@@ -356,7 +378,16 @@ export function PlansPage() {
                 onClick={() => {
                   const next = plans.filter((value) => value.id !== item.id);
                   setPlans(next);
-                  setConfiguration({ ...configuration, dayPlans: next });
+                  setConfiguration({
+                    ...configuration,
+                    dayPlans: [
+                      ...configuration.dayPlans.filter(
+                        (value) =>
+                          value.groupId !== configuration.activeGroupId,
+                      ),
+                      ...next,
+                    ],
+                  });
                 }}
               >
                 ×

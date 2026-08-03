@@ -102,8 +102,16 @@ def calculate_plan_pairs(
 def calculate_care(
     configuration: ScheduleConfiguration,
 ) -> list[CalculatedCareDay]:
+    active_groups = configuration.active_groups()
+    if len(configuration.groups) > 1:
+        result: list[CalculatedCareDay] = []
+        for group in active_groups:
+            result.extend(calculate_care(configuration.configuration_for_group(group.id)))
+        return sorted(result, key=lambda item: (item.date, item.group_id))
+
     step = configuration.organizational_rules.time_step_minutes
     result: list[CalculatedCareDay] = []
+    group_id = configuration.group_id or active_groups[0].id
     for day_index in range(configuration.planning_horizon_weeks * 7):
         current = configuration.cycle_start_date.fromordinal(
             configuration.cycle_start_date.toordinal() + day_index
@@ -121,6 +129,7 @@ def calculate_care(
         ]
         result.append(
             CalculatedCareDay(
+                group_id=group_id,
                 date=current,
                 week_number=week_number,
                 day_of_week=current.weekday(),

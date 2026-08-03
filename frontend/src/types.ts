@@ -16,9 +16,18 @@ export interface TimeInterval {
   description: string;
 }
 
+export interface GroupConfiguration {
+  id: string;
+  displayOrder: number;
+  code: string;
+  name: string;
+  classLabel: string;
+  active: boolean;
+}
+
 export interface Educator {
   id: string;
-  groupId: string;
+  groupId?: string | null;
   displayName: string;
   shortCode: string;
   baseWeeklyAssignedMinutes: number;
@@ -27,10 +36,21 @@ export interface Educator {
   canWorkWeekends: boolean;
 }
 
+export interface GroupEducatorMembership {
+  id: string;
+  groupId: string;
+  educatorId: string;
+  role: "PRIMARY" | "SUPPORT";
+  active: boolean;
+  weeklyTargetHoursByWeek: number[];
+  description: string;
+}
+
 export interface AssignmentOverride {
   id: string;
   educatorId: string;
   configurationVersionId: string;
+  groupId?: string | null;
   weekNumber: number;
   assignedMinutes: number;
   reason: string;
@@ -86,6 +106,7 @@ export interface WeekendDayTemplate {
 export interface WeekendVariant {
   id: string;
   configurationVersionId: string;
+  groupId?: string | null;
   variantKind: "BASE" | "SUBSTITUTE";
   positionInCycle?: number | null;
   replacesWeekendRotationVariantId?: string | null;
@@ -99,6 +120,25 @@ export interface WeekendVariant {
   approvedBy: string;
   saturdayTemplate: WeekendDayTemplate;
   sundayTemplate: WeekendDayTemplate;
+}
+
+export interface ExternalDutyAssignment {
+  id: string;
+  educatorId: string;
+  startDateTime: string;
+  endDateTime: string;
+  dutyType: "NIGHT" | "DINING_ROOM" | "OTHER";
+  locked: boolean;
+  countsTowardsHours: boolean;
+  description: string;
+}
+
+export interface CommonAreaDuty {
+  id: string;
+  date: string;
+  groupId: string;
+  dutyType: "NIGHT" | "DINING_ROOM" | "OTHER";
+  description: string;
 }
 
 export interface LegalRules {
@@ -145,11 +185,20 @@ export interface OrganizationalRules {
   preferredMaximumSegmentMinutes: number;
   preferredAfternoonHandoverTime: string;
   preferredWeekendSplitMinutes: number;
+  shortMiddleSegmentMinutes: number;
   splitDayPenaltyWeight: number;
   preferredUnavailabilityPenaltyWeight: number;
   longSegmentPenaltyWeight: number;
   weekendImbalancePenaltyWeight: number;
   afternoonHandoverPenaltyWeight: number;
+}
+
+export interface WorkAssignment {
+  groupId: string;
+  educatorId: string;
+  date: string;
+  startMinute: number;
+  endMinute: number;
 }
 
 export interface ScheduleConfiguration {
@@ -158,6 +207,10 @@ export interface ScheduleConfiguration {
   projectName: string;
   configurationVersionId: string;
   versionNumber: number;
+  groupCount: number;
+  groups: GroupConfiguration[];
+  activeGroupId: string;
+  selectedGroupIds: string[];
   groupId: string;
   groupName: string;
   cycleStartDate: string;
@@ -171,25 +224,21 @@ export interface ScheduleConfiguration {
   startingWeekendVariant: number;
   requestedOperationMode: "PRODUCTION" | "DEMONSTRATION";
   educators: Educator[];
+  groupMemberships: GroupEducatorMembership[];
   assignmentOverrides: AssignmentOverride[];
   dayPlans: DayPlan[];
   unavailability: Unavailability[];
   legalRules: LegalRules;
   organizationalRules: OrganizationalRules;
   weekendVariants: WeekendVariant[];
+  externalDutyAssignments: ExternalDutyAssignment[];
+  commonAreaDuties: CommonAreaDuty[];
+  lockedAssignments: WorkAssignment[];
   boundaryContext?: {
     educators: Array<{
       educatorId: string;
-      lastAssignmentBefore?: {
-        date: string;
-        startMinute: number;
-        endMinute: number;
-      } | null;
-      firstAssignmentAfter?: {
-        date: string;
-        startMinute: number;
-        endMinute: number;
-      } | null;
+      lastAssignmentBefore?: { date: string; startMinute: number; endMinute: number } | null;
+      firstAssignmentAfter?: { date: string; startMinute: number; endMinute: number } | null;
     }>;
   } | null;
   solverTimeLimitSeconds: number;
@@ -203,6 +252,7 @@ export interface DomainMessage {
   message: string;
   date?: string | null;
   educatorId?: string | null;
+  groupId?: string | null;
   startTime?: string | null;
   endTime?: string | null;
   requiredValue?: string | number | null;
@@ -217,6 +267,7 @@ export interface CareInterval {
 }
 
 export interface CareDay {
+  groupId: string;
   date: string;
   weekNumber: number;
   dayOfWeek: number;
@@ -231,6 +282,7 @@ export interface InputReport {
   messages: DomainMessage[];
   care: CareDay[];
   weeklyBalance: Array<{
+    groupId?: string;
     weekNumber: number;
     startDate: string;
     endDate: string;
@@ -241,21 +293,39 @@ export interface InputReport {
   }>;
 }
 
-export interface WorkAssignment {
-  educatorId: string;
-  date: string;
-  startMinute: number;
-  endMinute: number;
-}
-
 export interface Objective {
   afternoonPenalty: number;
   weekendPenalty: number;
   splitDaysPenalty: number;
+  continuousBlockHandovers: number;
+  distinctEducatorsPerBlock: number;
+  totalSegments: number;
+  shortMiddleSegments: number;
   longSegmentsPenalty: number;
   preferredUnavailabilityPenalty: number;
   objectiveScore: number;
   canonicalTieBreaker: number;
+}
+
+export interface QualityBlockDetail {
+  groupId: string;
+  date: string;
+  startMinute: number;
+  endMinute: number;
+  educatorIds: string[];
+  handovers: number;
+  explanation?: string | null;
+}
+
+export interface WeeklyQualitySummary {
+  weekNumber: number;
+  splitWorkDays: number;
+  handovers: number;
+  blocksWithOneEducator: number;
+  blocksWithTwoEducators: number;
+  blocksWithThreeEducators: number;
+  blocksWithMoreEducators: number;
+  multiEducatorBlocks: QualityBlockDetail[];
 }
 
 export interface ValidationReport {
@@ -292,4 +362,6 @@ export interface GenerateResponse {
   conflictReport?: ConflictReport | null;
   messages: DomainMessage[];
   nextWeekendVariant?: number | null;
+  qualityReport?: { weeks: WeeklyQualitySummary[] } | null;
+  optimizationProven?: boolean | null;
 }

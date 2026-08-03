@@ -20,7 +20,10 @@ export function SummaryPage() {
     generate,
   } = useAppState();
   if (!configuration) return <EmptyState>Najpierw utwórz konfigurację.</EmptyState>;
-  const expectedDates = configuration.planningHorizonWeeks * 7;
+  const expectedDates =
+    configuration.planningHorizonWeeks *
+    7 *
+    configuration.selectedGroupIds.length;
 
   const runGeneration = async () => {
     const result = await generate();
@@ -108,10 +111,10 @@ export function SummaryPage() {
               {inputReport.weeklyBalance.map((item) => (
                 <article
                   className={`balance-card ${item.differenceMinutes === 0 ? "balance-card--ok" : "balance-card--error"}`}
-                  key={item.weekNumber}
+                  key={`${item.groupId ?? "G"}-${item.weekNumber}`}
                 >
                   <header>
-                    <span>Tydzień {item.weekNumber}</span>
+                    <span>{item.groupId ? `${configuration.groups.find((group) => group.id === item.groupId)?.code} · ` : ""}Tydzień {item.weekNumber}</span>
                     <strong>
                       {item.differenceMinutes > 0 ? "+" : ""}
                       {formatMinutes(item.differenceMinutes)}
@@ -143,10 +146,10 @@ export function SummaryPage() {
             </div>
             <div className="care-list">
               {inputReport.care.map((day) => (
-                <div className="care-row" key={day.date}>
+                <div className="care-row" key={`${day.groupId}-${day.date}`}>
                   <span>
                     <strong>{day.date}</strong>
-                    <small>Tydzień {day.weekNumber}</small>
+                    <small>{configuration.groups.find((group) => group.id === day.groupId)?.code} · Tydzień {day.weekNumber}</small>
                   </span>
                   <Timeline intervals={day.intervals} />
                   <strong>{formatMinutes(day.totalRequiredMinutes)}</strong>

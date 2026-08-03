@@ -35,6 +35,7 @@ class SolverResult:
     assignments: list[WorkAssignment]
     objective_score: int | None = None
     solver_status_name: str = ""
+    optimization_proven: bool = False
 
 
 @dataclass(slots=True)
@@ -397,6 +398,19 @@ def solve_schedule(
                     model.add(
                         x[(educator_index, day_index, slot + offset)] >= start
                     )
+            # Krytyczny zakaz powrotu A–B–A obowiązuje osobno w każdym
+            # maksymalnym ciągłym bloku zapotrzebowania.
+            for interval in care[day_index].intervals:
+                model.add(
+                    sum(
+                        starts[(educator_index, day_index, slot)]
+                        for slot in range(
+                            interval.start_minute // step,
+                            interval.end_minute // step,
+                        )
+                    )
+                    <= 1
+                )
 
     for educator_index, educator in enumerate(educators):
         for week_index in range(total_weeks):
@@ -602,6 +616,48 @@ def solve_schedule(
         for day_index in range(total_days)
     ]
 
+    handover_count_terms = []
+    distinct_educator_terms = []
+    for day_index, day in enumerate(care):
+        for block_index, interval in enumerate(day.intervals):
+            block_slots = list(
+                range(
+                    interval.start_minute // step,
+                    interval.end_minute // step,
+                )
+            )
+            used = []
+            for educator_index in range(len(educators)):
+                variable = model.new_bool_var(
+                    f"block_used_{day_index}_{block_index}_{educator_index}"
+                )
+                model.add_max_equality(
+                    variable,
+                    [
+                        x[(educator_index, day_index, slot)]
+                        for slot in block_slots
+                    ],
+                )
+                used.append(variable)
+            distinct_educator_terms.append(sum(used) - 1)
+            for slot in block_slots[1:]:
+                same_terms = []
+                for educator_index in range(len(educators)):
+                    same = model.new_bool_var(
+                        f"same_owner_{day_index}_{slot}_{educator_index}"
+                    )
+                    before = x[(educator_index, day_index, slot - 1)]
+                    after = x[(educator_index, day_index, slot)]
+                    model.add(same <= before)
+                    model.add(same <= after)
+                    model.add(same >= before + after - 1)
+                    same_terms.append(same)
+                handover = model.new_bool_var(
+                    f"block_handover_{day_index}_{slot}"
+                )
+                model.add(handover + sum(same_terms) == 1)
+                handover_count_terms.append(handover)
+
     preferred_segment_slots = org.preferred_maximum_segment_minutes // step
     long_terms = []
     for educator_index in range(len(educators)):
@@ -683,38 +739,110 @@ def solve_schedule(
             for minutes in totals.values()
         )
 
-    soft_score = (
-        org.afternoon_handover_penalty_weight * sum(afternoon_terms)
-        + org.weekend_imbalance_penalty_weight * weekend_penalty
-        + org.split_day_penalty_weight * sum(split_terms)
-        + org.long_segment_penalty_weight * sum(long_terms)
-        + org.preferred_unavailability_penalty_weight
-        * sum(preferred_unavailable_terms)
+    segment_terms = list(starts.values())
+    segment_bound = max(
+        1,
+        sum(len(day.intervals) for day in care) * len(educators),
     )
-    # Wyjątek prawny jest zawsze mniej pożądany niż dowolna poprawa miękka.
-    exception_priority = 1_000_000 * sum(exception_variables)
-    model.minimize(exception_priority + soft_score)
+    distinct_bound = max(1, len(distinct_educator_terms) * len(educators))
+    handover_bound = max(1, len(handover_count_terms))
+    primary_quality = (
+        (
+            sum(split_terms) * (handover_bound + 1)
+            + sum(handover_count_terms)
+        )
+        * (distinct_bound + 1)
+        + sum(distinct_educator_terms)
+    ) * (segment_bound + 1) + sum(segment_terms)
+    preferred_bound = max(1, len(preferred_unavailable_terms))
+    long_bound = max(1, len(long_terms))
+    afternoon_bound = max(1, len(afternoon_terms) * rules.SLOTS_PER_DAY)
+    exception_bound = max(1, len(exception_variables))
+    secondary_score = (
+        (
+            (
+                sum(preferred_unavailable_terms) * (long_bound + 1)
+                + sum(long_terms)
+            )
+            * (afternoon_bound + 1)
+            + sum(afternoon_terms)
+        )
+        * (exception_bound + 1)
+        + sum(exception_variables)
+    )
+    secondary_bound = (
+        (
+            (preferred_bound * (long_bound + 1) + long_bound)
+            * (afternoon_bound + 1)
+            + afternoon_bound
+        )
+        * (exception_bound + 1)
+        + exception_bound
+        + weekend_penalty
+    )
+    # Każdy mnożnik jest większy od ścisłej górnej granicy wszystkich
+    # niższych poziomów. Jest to pojedynczy, równoważny cel leksykograficzny:
+    # split days → handovers → distinct educators → segments → PREFERRED →
+    # long segments → preferred handover time → legal exceptions.
+    lexicographic_score = (
+        primary_quality * (secondary_bound + 1)
+        + secondary_score
+        + weekend_penalty
+    )
+    model.add_decision_strategy(
+        list(starts.values()),
+        cp_model.CHOOSE_FIRST,
+        cp_model.SELECT_MIN_VALUE,
+    )
+    model.add_decision_strategy(
+        handover_count_terms,
+        cp_model.CHOOSE_FIRST,
+        cp_model.SELECT_MIN_VALUE,
+    )
+    model.add_decision_strategy(
+        list(x.values()),
+        cp_model.CHOOSE_FIRST,
+        cp_model.SELECT_MIN_VALUE,
+    )
+    def configured_solver() -> cp_model.CpSolver:
+        value = cp_model.CpSolver()
+        value.parameters.max_time_in_seconds = configuration.solver_time_limit_seconds
+        value.parameters.num_search_workers = 1
+        value.parameters.random_seed = configuration.random_seed
+        value.parameters.cp_model_presolve = True
+        value.parameters.log_search_progress = False
+        return value
 
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = configuration.solver_time_limit_seconds
-    solver.parameters.num_search_workers = 1
-    solver.parameters.random_seed = configuration.random_seed
-    solver.parameters.cp_model_presolve = True
-    solver.parameters.log_search_progress = False
-    status = solver.solve(model)
-    status_name = solver.status_name(status)
-    if status == cp_model.INFEASIBLE:
+    # Najpierw wyszukiwany jest legalny kandydat. Dzięki temu trudniejszy
+    # dowód jakości nigdy nie odbiera użytkownikowi rozwiązania spełniającego
+    # wszystkie ograniczenia twarde.
+    model.minimize(0)
+    feasibility_solver = configured_solver()
+    feasibility_status = feasibility_solver.solve(model)
+    if feasibility_status == cp_model.INFEASIBLE:
         return SolverResult(
             status=GenerationStatus.NO_SOLUTION,
             assignments=[],
-            solver_status_name=status_name,
+            solver_status_name=feasibility_solver.status_name(feasibility_status),
         )
-    if status != cp_model.OPTIMAL:
+    if feasibility_status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return SolverResult(
             status=GenerationStatus.TIME_LIMIT,
             assignments=[],
-            solver_status_name=status_name,
+            solver_status_name=feasibility_solver.status_name(feasibility_status),
         )
+
+    for variable in x.values():
+        model.add_hint(variable, feasibility_solver.value(variable))
+    model.minimize(lexicographic_score)
+    optimizer = configured_solver()
+    optimization_status = optimizer.solve(model)
+    if optimization_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        solver = optimizer
+        status_name = optimizer.status_name(optimization_status)
+    else:
+        solver = feasibility_solver
+        status_name = "FEASIBLE_HARD_RULES_ONLY"
 
     assignments: list[WorkAssignment] = []
     for educator_index, educator in enumerate(educators):
@@ -730,6 +858,7 @@ def solve_schedule(
                 if not worked and segment_start is not None:
                     assignments.append(
                         WorkAssignment(
+                            group_id=configuration.group_id or "",
                             educator_id=educator.id,
                             date=day.date,
                             start_minute=segment_start,
@@ -743,4 +872,5 @@ def solve_schedule(
         assignments=assignments,
         objective_score=objective.objective_score,
         solver_status_name=status_name,
+        optimization_proven=optimization_status == cp_model.OPTIMAL,
     )

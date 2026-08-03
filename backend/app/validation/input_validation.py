@@ -48,6 +48,162 @@ def _has_errors(messages: list[DomainMessage]) -> bool:
     return any(message.severity == "ERROR" for message in messages)
 
 
+def _validate_internat_project(
+    configuration: ScheduleConfiguration,
+) -> InputValidationResponse:
+    messages: list[DomainMessage] = []
+    active_groups = [item for item in configuration.groups if item.active]
+    group_ids = {item.id for item in active_groups}
+    educator_ids = {item.id for item in configuration.educators if item.active}
+    if configuration.group_count != len(active_groups):
+        messages.append(
+            error(
+                rules.RULE_NO_GUESSING,
+                "Liczba grup nie odpowiada liczbie aktywnych konfiguracji grup.",
+                required=configuration.group_count,
+                actual=len(active_groups),
+            )
+        )
+    selected = set(configuration.selected_group_ids)
+    if not selected or not selected.issubset(group_ids):
+        messages.append(
+            error(
+                rules.RULE_NO_GUESSING,
+                "Zakres generowania musi wskazywać istniejące aktywne grupy.",
+                required=str(sorted(group_ids)),
+                actual=str(sorted(selected)),
+            )
+        )
+    membership_keys: set[tuple[str, str]] = set()
+    for membership in configuration.group_memberships:
+        key = (membership.group_id, membership.educator_id)
+        if key in membership_keys:
+            messages.append(
+                error(
+                    rules.RULE_NO_GUESSING,
+                    "Członkostwo wychowawcy w grupie nie może być zduplikowane.",
+                    group_id=membership.group_id,
+                    educator_id=membership.educator_id,
+                    actual=str(key),
+                )
+            )
+        membership_keys.add(key)
+        if membership.group_id not in group_ids or membership.educator_id not in educator_ids:
+            messages.append(
+                error(
+                    rules.RULE_NO_GUESSING,
+                    "Członkostwo wskazuje nieistniejącą grupę albo wychowawcę.",
+                    group_id=membership.group_id,
+                    educator_id=membership.educator_id,
+                )
+            )
+        if len(membership.weekly_target_hours_by_week) not in (
+            1,
+            configuration.planning_horizon_weeks,
+        ):
+            messages.append(
+                error(
+                    rules.RULE_HOURS,
+                    "Wymiar członkostwa musi zawierać jedną wartość bazową albo wartość każdego tygodnia.",
+                    group_id=membership.group_id,
+                    educator_id=membership.educator_id,
+                    required=configuration.planning_horizon_weeks,
+                    actual=len(membership.weekly_target_hours_by_week),
+                )
+            )
+        for value in membership.weekly_target_hours_by_week:
+            if value < 0 or round(value * 2) != value * 2:
+                messages.append(
+                    error(
+                        rules.RULE_TIME_STEP,
+                        "Wymiar godzin musi być nieujemną wielokrotnością 30 minut.",
+                        group_id=membership.group_id,
+                        educator_id=membership.educator_id,
+                        actual=value,
+                    )
+                )
+    for group in active_groups:
+        count = len(configuration.memberships_for_group(group.id))
+        if count not in (3, 4):
+            messages.append(
+                error(
+                    rules.RULE_NO_GUESSING,
+                    "Aktywna grupa wymaga trzech lub czterech członkostw.",
+                    group_id=group.id,
+                    required="3 albo 4",
+                    actual=count,
+                )
+            )
+    for duty in configuration.external_duty_assignments:
+        if duty.educator_id not in educator_ids:
+            messages.append(
+                error(
+                    rules.RULE_CROSS_GROUP_REST,
+                    "Dyżur zewnętrzny ma niepoprawną osobę albo zakres czasu.",
+                    educator_id=duty.educator_id,
+                    actual=f"{duty.start_date_time}–{duty.end_date_time}",
+                )
+            )
+    for duty in configuration.common_area_duties:
+        if duty.group_id not in group_ids:
+            messages.append(
+                error(
+                    rules.RULE_NO_GUESSING,
+                    "Dyżur wspólny wskazuje nieistniejącą grupę.",
+                    group_id=duty.group_id,
+                    date_value=duty.date,
+                )
+            )
+    for assignment in configuration.locked_assignments:
+        if (
+            assignment.educator_id not in educator_ids
+            or assignment.group_id not in {"EXTERNAL", *group_ids}
+        ):
+            messages.append(
+                error(
+                    rules.RULE_CROSS_GROUP_NO_OVERLAP,
+                    "Zablokowany przydział wskazuje nieistniejącą osobę albo grupę.",
+                    group_id=assignment.group_id,
+                    educator_id=assignment.educator_id,
+                    date_value=assignment.date,
+                )
+            )
+    if _has_errors(messages):
+        return InputValidationResponse(
+            status=InputStatus.INVALID_INPUT,
+            public_result=PublicResult.DANE_NIEPOPRAWNE,
+            messages=messages,
+        )
+
+    care: list[CalculatedCareDay] = []
+    balances: list[dict] = []
+    for group in configuration.active_groups():
+        report = validate_configuration(configuration.configuration_for_group(group.id))
+        for message in report.messages:
+            messages.append(
+                message
+                if message.group_id is not None
+                else message.model_copy(update={"group_id": group.id})
+            )
+        care.extend(report.care)
+        balances.extend(
+            [{**item, "groupId": group.id} for item in report.weekly_balance]
+        )
+    return InputValidationResponse(
+        status=(
+            InputStatus.INVALID_INPUT
+            if _has_errors(messages)
+            else InputStatus.VALID_INPUT
+        ),
+        public_result=(
+            PublicResult.DANE_NIEPOPRAWNE if _has_errors(messages) else None
+        ),
+        messages=messages,
+        care=sorted(care, key=lambda item: (item.date, item.group_id)),
+        weekly_balance=balances,
+    )
+
+
 def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMessage]:
     messages: list[DomainMessage] = []
     org = configuration.organizational_rules
@@ -958,6 +1114,10 @@ def _weekend_compatibility(
 def validate_configuration(
     configuration: ScheduleConfiguration,
 ) -> InputValidationResponse:
+    if len(configuration.groups) > 1 or any(
+        item.group_id is None for item in configuration.educators
+    ):
+        return _validate_internat_project(configuration)
     messages = _structural_messages(configuration)
     if _has_errors(messages):
         return InputValidationResponse(

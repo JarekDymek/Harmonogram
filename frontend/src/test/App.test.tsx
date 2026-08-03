@@ -25,7 +25,7 @@ describe("główny przepływ interfejsu", () => {
     renderApp();
     expect(
       screen.getByRole("heading", {
-        name: /Od jednego do sześciu tygodni\. Trzy albo cztery osoby\./i,
+        name: /Od jednej do ośmiu grup\. Jeden wspólny harmonogram internatu\./i,
       }),
     ).toBeInTheDocument();
     expect(
@@ -94,9 +94,33 @@ describe("główny przepływ interfejsu", () => {
     );
     await user.click(screen.getByRole("link", { name: /Wychowawcy/ }));
     expect(
-      await screen.findByRole("heading", { name: "4 wychowawców" }),
+      await screen.findByRole("heading", { name: "4 członkostwa" }),
     ).toBeVisible();
-    expect(screen.getByText("Wychowawca D")).toBeVisible();
+    expect(screen.getAllByDisplayValue("Nowy wychowawca uzupełniający")).toHaveLength(1);
+  });
+
+  it("tworzy drugą grupę i wymaga potwierdzenia przed jej usunięciem", async () => {
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v3",
+      JSON.stringify(configurationFixture),
+    );
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+    renderApp("/konfiguracja");
+    await user.selectOptions(
+      screen.getByLabelText("Liczba grup w internacie"),
+      "2",
+    );
+    await user.click(screen.getByRole("button", { name: "Zapisz konfigurację" }));
+    expect(screen.getByLabelText("Aktualnie edytowana grupa")).toHaveDisplayValue("I · Grupa testowa");
+    expect(screen.getByLabelText("Aktualnie edytowana grupa").querySelectorAll("option")).toHaveLength(2);
+    await user.selectOptions(
+      screen.getByLabelText("Liczba grup w internacie"),
+      "1",
+    );
+    await user.click(screen.getByRole("button", { name: "Zapisz konfigurację" }));
+    expect(confirmation).toHaveBeenCalled();
+    expect(screen.getByLabelText("Liczba grup w internacie")).toHaveValue("2");
   });
 
   it("udostępnia cykl tylko dla horyzontu sześciotygodniowego", async () => {

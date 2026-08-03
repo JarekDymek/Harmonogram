@@ -28,6 +28,9 @@ def test_api_health_demo_and_input_validation():
     demo = client.get("/api/demo")
     assert demo.status_code == 200
     assert len(demo.json()["educators"]) == 3
+    assert demo.json()["schemaVersion"] == 3
+    assert demo.json()["groupCount"] == 1
+    assert len(demo.json()["groupMemberships"]) == 3
     validated = client.post("/api/validate-input", json=demo.json())
     assert validated.status_code == 200
     assert validated.json()["status"] == "VALID_INPUT"

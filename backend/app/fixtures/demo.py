@@ -8,6 +8,9 @@ from app.models.schemas import (
     Educator,
     EducatorUnavailability,
     EventType,
+    GroupConfiguration,
+    GroupEducatorMembership,
+    GroupEducatorRole,
     LegalRulesConfiguration,
     LegalStatus,
     OperationMode,
@@ -127,6 +130,7 @@ def _variant(position: int, first: str, second: str, off: str) -> WeekendRotatio
     return WeekendRotationVariant(
         id=variant_id,
         configuration_version_id=DEMO_VERSION,
+        group_id=DEMO_GROUP,
         variant_kind=WeekendVariantKind.BASE,
         position_in_cycle=position,
         off_educator_id=off,
@@ -155,7 +159,6 @@ def demo_configuration() -> ScheduleConfiguration:
     educators = [
         Educator(
             id="A",
-            group_id=DEMO_GROUP,
             display_name="Anna Kowalska",
             short_code="AK",
             base_weekly_assigned_minutes=1650,
@@ -163,7 +166,6 @@ def demo_configuration() -> ScheduleConfiguration:
         ),
         Educator(
             id="B",
-            group_id=DEMO_GROUP,
             display_name="Bartosz Nowak",
             short_code="BN",
             base_weekly_assigned_minutes=1650,
@@ -171,7 +173,6 @@ def demo_configuration() -> ScheduleConfiguration:
         ),
         Educator(
             id="C",
-            group_id=DEMO_GROUP,
             display_name="Celina Wiśniewska",
             short_code="CW",
             base_weekly_assigned_minutes=1620,
@@ -179,11 +180,23 @@ def demo_configuration() -> ScheduleConfiguration:
         ),
     ]
     return ScheduleConfiguration(
-        schema_version=2,
+        schema_version=3,
         project_id="HARMONOGRAM-MOW-DEMO",
         project_name="Harmonogram MOW — demonstracja",
         configuration_version_id=DEMO_VERSION,
         version_number=1,
+        group_count=1,
+        groups=[
+            GroupConfiguration(
+                id=DEMO_GROUP,
+                display_order=1,
+                code="I",
+                name="Grupa demonstracyjna",
+                class_label="kl. 7",
+            )
+        ],
+        active_group_id=DEMO_GROUP,
+        selected_group_ids=[DEMO_GROUP],
         group_id=DEMO_GROUP,
         group_name="Grupa demonstracyjna",
         cycle_start_date=cycle_start,
@@ -195,6 +208,32 @@ def demo_configuration() -> ScheduleConfiguration:
         starting_weekend_variant=1,
         requested_operation_mode=OperationMode.DEMONSTRATION,
         educators=educators,
+        group_memberships=[
+            GroupEducatorMembership(
+                id="MEM-G1-A",
+                group_id=DEMO_GROUP,
+                educator_id="A",
+                role=GroupEducatorRole.PRIMARY,
+                weekly_target_hours_by_week=[27.5],
+                description="Dane demonstracyjne.",
+            ),
+            GroupEducatorMembership(
+                id="MEM-G1-B",
+                group_id=DEMO_GROUP,
+                educator_id="B",
+                role=GroupEducatorRole.PRIMARY,
+                weekly_target_hours_by_week=[27.5],
+                description="Dane demonstracyjne.",
+            ),
+            GroupEducatorMembership(
+                id="MEM-G1-C",
+                group_id=DEMO_GROUP,
+                educator_id="C",
+                role=GroupEducatorRole.PRIMARY,
+                weekly_target_hours_by_week=[27],
+                description="Dane demonstracyjne.",
+            ),
+        ],
         assignment_overrides=[],
         day_plans=plans,
         unavailability=[
@@ -276,7 +315,7 @@ def demo_configuration() -> ScheduleConfiguration:
             _variant(5, "C", "A", "B"),
             _variant(6, "C", "B", "A"),
         ],
-        solver_time_limit_seconds=45,
+        solver_time_limit_seconds=10,
         random_seed=20260724,
         demonstration_notice=DEMO_NOTICE,
     )
