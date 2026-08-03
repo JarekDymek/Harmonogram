@@ -12,6 +12,14 @@ import {
 } from "../components/UI";
 import { useAppState } from "../state/AppState";
 
+function educatorColor(educatorId: string) {
+  let hash = 0;
+  for (const character of educatorId) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return `hsl(${hash % 360} 58% 88%)`;
+}
+
 export function SchedulePage() {
   const navigate = useNavigate();
   const { configuration, generation, generate, busy } = useAppState();
@@ -100,10 +108,24 @@ export function SchedulePage() {
     );
   }
 
-  const assignments = generation.assignments.filter((item) =>
+  const allWeekAssignments = generation.assignments.filter((item) =>
     weekDates.includes(item.date),
   );
-  const weekSummary = configuration.educators.map((educator) => {
+  const assignments = allWeekAssignments.filter(
+    (item) => item.groupId === configuration.activeGroupId,
+  );
+  const memberIds = new Set(
+    configuration.groupMemberships
+      .filter(
+        (item) =>
+          item.active && item.groupId === configuration.activeGroupId,
+      )
+      .map((item) => item.educatorId),
+  );
+  const groupEducators = configuration.educators.filter((item) =>
+    memberIds.has(item.id),
+  );
+  const weekSummary = groupEducators.map((educator) => {
     const relevant = assignments.filter((item) => item.educatorId === educator.id);
     return {
       educator,
@@ -118,21 +140,31 @@ export function SchedulePage() {
       ).length,
     };
   });
+  const globalSummary = configuration.educators.map((educator) => {
+    const relevant = allWeekAssignments.filter(
+      (item) => item.educatorId === educator.id,
+    );
+    return {
+      educator,
+      minutes: relevant.reduce(
+        (sum, item) => sum + item.endMinute - item.startMinute,
+        0,
+      ),
+      days: new Set(relevant.map((item) => item.date)).size,
+    };
+  });
 
   return (
     <>
       <PageHeader
         eyebrow="KROK 08 · WYNIK"
-        title={`Harmonogram: ${configuration.planningHorizonWeeks} tyg.`}
-        description="Każdy odcinek pochodzi z wyniku zatwierdzonego przez niezależny walidator."
+        title={`Harmonogram grupy ${configuration.groupName}`}
+        description="Szczegół wybranej grupy; kontrola kolizji i odpoczynków została wykonana globalnie dla całego internatu."
         actions={
-          <button
-            className="button button--secondary"
-            type="button"
-            onClick={() => navigate("/walidacja")}
-          >
-            Otwórz raport walidacji
-          </button>
+          <div className="button-row">
+            <button className="button button--secondary" type="button" onClick={() => navigate("/internat")}>Cały internat</button>
+            <button className="button button--secondary" type="button" onClick={() => navigate("/walidacja")}>Otwórz raport walidacji</button>
+          </div>
         }
       />
       {generation.publicResult === "POPRAWNY_TRYB_DEMONSTRACYJNY" && (
@@ -156,6 +188,16 @@ export function SchedulePage() {
         <div>
           <small>Następna pozycja weekendu</small>
           <strong>{generation.nextWeekendVariant ?? "—"}</strong>
+        </div>
+        <div>
+          <small>Optymalność celu</small>
+          <StatusBadge
+            value={
+              generation.optimizationProven
+                ? "UDOWODNIONA"
+                : "NAJLEPSZA ZNALEZIONA"
+            }
+          />
         </div>
         <div className="segmented-control" aria-label="Rodzaj widoku">
           <button
@@ -213,6 +255,7 @@ export function SchedulePage() {
                     return (
                       <div
                         className={`shift shift--${item.educatorId.toLowerCase()}`}
+                        style={{ backgroundColor: educatorColor(item.educatorId) }}
                         key={`${item.educatorId}-${item.startMinute}`}
                       >
                         <span>{educator?.shortCode ?? item.educatorId}</span>
@@ -230,7 +273,7 @@ export function SchedulePage() {
         </section>
       ) : (
         <section className="educator-schedule">
-          {configuration.educators.map((educator) => (
+          {groupEducators.map((educator) => (
             <article key={educator.id}>
               <header>
                 <div className={`avatar avatar--${educator.id}`}>
@@ -291,6 +334,20 @@ export function SchedulePage() {
         </div>
       </section>
 
+      {configuration.groupCount > 1 && (
+        <section className="section-block">
+          <div className="section-heading"><div><span className="eyebrow">CAŁY INTERNAT · TYDZIEŃ {week}</span><h2>Globalne godziny i dni pracy</h2></div></div>
+          <div className="metric-grid metric-grid--three">
+            {globalSummary.filter((item) => item.minutes > 0).map((item) => (
+              <div className="metric person-metric" key={item.educator.id}>
+                <span className="avatar" style={{ backgroundColor: educatorColor(item.educator.id) }}>{item.educator.shortCode}</span>
+                <div><small>{item.educator.displayName}</small><strong>{formatMinutes(item.minutes)}</strong><span>{item.days} dni globalnie</span></div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {generation.objective && (
         <section className="section-block">
           <div className="section-heading">
@@ -300,12 +357,45 @@ export function SchedulePage() {
             </div>
           </div>
           <div className="objective-grid">
-            <div><span>Przekazania</span><strong>{generation.objective.afternoonPenalty}</strong></div>
+            <div><span>Przekazania w blokach</span><strong>{generation.objective.continuousBlockHandovers}</strong></div>
+            <div><span>Osoby ponad pierwszą</span><strong>{generation.objective.distinctEducatorsPerBlock}</strong></div>
+            <div><span>Wszystkie odcinki</span><strong>{generation.objective.totalSegments}</strong></div>
+            <div><span>Krótkie środkowe</span><strong>{generation.objective.shortMiddleSegments}</strong></div>
+            <div><span>Odchylenie godziny przekazania</span><strong>{generation.objective.afternoonPenalty}</strong></div>
             <div><span>Weekend</span><strong>{generation.objective.weekendPenalty}</strong></div>
             <div><span>Dni dzielone</span><strong>{generation.objective.splitDaysPenalty}</strong></div>
             <div><span>Długie odcinki</span><strong>{generation.objective.longSegmentsPenalty}</strong></div>
             <div><span>PREFERRED</span><strong>{generation.objective.preferredUnavailabilityPenalty}</strong></div>
           </div>
+        </section>
+      )}
+
+      {generation.qualityReport?.weeks.find((item) => item.weekNumber === week) && (
+        <section className="section-block">
+          <div className="section-heading"><div><span className="eyebrow">RAPORT JAKOŚCI</span><h2>Podziały ciągłych bloków</h2></div></div>
+          {(() => {
+            const quality = generation.qualityReport!.weeks.find((item) => item.weekNumber === week)!;
+            return (
+              <>
+                <div className="objective-grid">
+                  <div><span>Dni dzielone</span><strong>{quality.splitWorkDays}</strong></div>
+                  <div><span>Przekazania</span><strong>{quality.handovers}</strong></div>
+                  <div><span>Bloki: 1 osoba</span><strong>{quality.blocksWithOneEducator}</strong></div>
+                  <div><span>Bloki: 2 osoby</span><strong>{quality.blocksWithTwoEducators}</strong></div>
+                  <div><span>Bloki: 3 osoby</span><strong>{quality.blocksWithThreeEducators}</strong></div>
+                </div>
+                <div className="record-list">
+                  {quality.multiEducatorBlocks.map((item) => (
+                    <div className="record-row" key={`${item.groupId}-${item.date}-${item.startMinute}`}>
+                      <span>{configuration.groups.find((group) => group.id === item.groupId)?.code}</span>
+                      <strong>{item.date} · {minutesToTime(item.startMinute)}–{minutesToTime(item.endMinute)} · {item.educatorIds.map((id) => configuration.educators.find((educator) => educator.id === id)?.shortCode ?? id).join(" → ")}</strong>
+                      <small>{item.explanation}</small>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </section>
       )}
     </>

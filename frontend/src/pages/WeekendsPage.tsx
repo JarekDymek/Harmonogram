@@ -17,7 +17,24 @@ export function WeekendsPage() {
 
   useEffect(() => {
     if (configuration) {
-      setVariants(structuredClone(configuration.weekendVariants));
+      const memberIds = new Set(
+        configuration.groupMemberships
+          .filter(
+            (item) =>
+              item.active && item.groupId === configuration.activeGroupId,
+          )
+          .map((item) => item.educatorId),
+      );
+      const groupEducators = configuration.educators.filter((item) =>
+        memberIds.has(item.id),
+      );
+      setVariants(
+        structuredClone(
+          configuration.weekendVariants.filter(
+            (item) => item.groupId === configuration.activeGroupId,
+          ),
+        ),
+      );
       const saturday = new Date(`${configuration.cycleStartDate}T12:00:00Z`);
       saturday.setUTCDate(saturday.getUTCDate() + 5);
       const sunday = new Date(saturday);
@@ -29,13 +46,24 @@ export function WeekendsPage() {
         sundayDate: sunday.toISOString().slice(0, 10),
         offEducatorId:
           configuration.educatorCount === 3
-            ? configuration.educators[2]?.id
+            ? groupEducators[2]?.id
             : "",
       });
     }
   }, [configuration, substituteForm]);
 
   if (!configuration) return <EmptyState>Najpierw utwórz konfigurację.</EmptyState>;
+
+  const memberIds = new Set(
+    configuration.groupMemberships
+      .filter(
+        (item) => item.active && item.groupId === configuration.activeGroupId,
+      )
+      .map((item) => item.educatorId),
+  );
+  const groupEducators = configuration.educators.filter((item) =>
+    memberIds.has(item.id),
+  );
 
   const base = variants
     .filter((item) => item.variantKind === "BASE")
@@ -63,7 +91,15 @@ export function WeekendsPage() {
   };
 
   const save = () => {
-    setConfiguration({ ...configuration, weekendVariants: variants });
+    setConfiguration({
+      ...configuration,
+      weekendVariants: [
+        ...configuration.weekendVariants.filter(
+          (item) => item.groupId !== configuration.activeGroupId,
+        ),
+        ...variants,
+      ],
+    });
   };
 
   const addSubstitute = substituteForm.handleSubmit((values) => {
@@ -108,7 +144,15 @@ export function WeekendsPage() {
       item,
     ];
     setVariants(next);
-    setConfiguration({ ...configuration, weekendVariants: next });
+    setConfiguration({
+      ...configuration,
+      weekendVariants: [
+        ...configuration.weekendVariants.filter(
+          (existing) => existing.groupId !== configuration.activeGroupId,
+        ),
+        ...next,
+      ],
+    });
   });
 
   return (
@@ -133,7 +177,7 @@ export function WeekendsPage() {
               (item) => item.educatorId,
             ),
           ]);
-          const notWorking = configuration.educators
+          const notWorking = groupEducators
             .filter((item) => !working.has(item.id))
             .map((item) => item.shortCode)
             .join(", ");
@@ -175,7 +219,7 @@ export function WeekendsPage() {
                         )
                       }
                     >
-                      {configuration.educators.map((item) => (
+                      {groupEducators.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.shortCode}
                         </option>
@@ -280,7 +324,7 @@ export function WeekendsPage() {
               {configuration.educatorCount === 4 && (
                 <option value="">Bez pojedynczego wskazania</option>
               )}
-              {configuration.educators.map((item) => (
+              {groupEducators.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.shortCode}
                 </option>
@@ -317,7 +361,13 @@ export function WeekendsPage() {
                       setVariants(next);
                       setConfiguration({
                         ...configuration,
-                        weekendVariants: next,
+                        weekendVariants: [
+                          ...configuration.weekendVariants.filter(
+                            (existing) =>
+                              existing.groupId !== configuration.activeGroupId,
+                          ),
+                          ...next,
+                        ],
                       });
                     }}
                   >
@@ -352,7 +402,7 @@ export function WeekendsPage() {
                               )
                             }
                           >
-                            {configuration.educators.map((educator) => (
+                            {groupEducators.map((educator) => (
                               <option key={educator.id} value={educator.id}>
                                 {educator.shortCode}
                               </option>

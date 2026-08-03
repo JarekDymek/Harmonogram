@@ -8,6 +8,8 @@ import pytest
 from app.fixtures.demo import demo_configuration
 from app.models.schemas import (
     Educator,
+    GroupEducatorMembership,
+    GroupEducatorRole,
     InputStatus,
     LegalStatus,
     OperationMode,
@@ -28,6 +30,12 @@ def four_person_configuration():
         strict=True,
     ):
         educator.base_weekly_assigned_minutes = assigned
+    for membership, assigned in zip(
+        configuration.group_memberships,
+        (1320, 1320, 1140),
+        strict=True,
+    ):
+        membership.weekly_target_hours_by_week = [assigned / 60]
     configuration.educators.append(
         Educator(
             id="D",
@@ -35,6 +43,16 @@ def four_person_configuration():
             display_name="Dorota Zielińska",
             short_code="DZ",
             base_weekly_assigned_minutes=1140,
+            description="Czwarta osoba testowa.",
+        )
+    )
+    configuration.group_memberships.append(
+        GroupEducatorMembership(
+            id="MEM-G1-D",
+            group_id=configuration.group_id,
+            educator_id="D",
+            role=GroupEducatorRole.SUPPORT,
+            weekly_target_hours_by_week=[19],
             description="Czwarta osoba testowa.",
         )
     )

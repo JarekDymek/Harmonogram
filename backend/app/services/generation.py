@@ -11,7 +11,9 @@ from app.models.schemas import (
     ValidationStatus,
 )
 from app.services.objective import calculate_objective
+from app.services.quality import build_quality_report
 from app.services.reports import error, info
+from app.solver.internat_solver import solve_internat_schedule
 from app.solver.schedule_solver import solve_schedule
 from app.validation.input_validation import validate_configuration
 from app.validation.schedule_validator import validate_schedule
@@ -35,7 +37,22 @@ def generate_schedule(
             next_weekend_variant=next_weekend_variant,
         )
 
-    solver_result = solve_schedule(configuration, input_report.care)
+    use_internat_solver = (
+        len(configuration.active_groups()) > 1
+        or bool(configuration.external_duty_assignments)
+        or bool(configuration.locked_assignments)
+    )
+    if use_internat_solver:
+        solver_result = solve_internat_schedule(configuration, input_report.care)
+    else:
+        group = configuration.active_groups()[0]
+        group_configuration = configuration.configuration_for_group(group.id)
+        solver_result = solve_schedule(
+            group_configuration,
+            [
+                item for item in input_report.care if item.group_id == group.id
+            ],
+        )
     if solver_result.status == GenerationStatus.NO_SOLUTION:
         conflict_ids = [
             rules.RULE_HOURS,
@@ -44,6 +61,9 @@ def generate_schedule(
             rules.RULE_REST_DAILY,
             rules.RULE_REST_WEEKLY,
             rules.RULE_WEEKEND,
+            rules.RULE_NO_RETURN_WITHIN_BLOCK,
+            rules.RULE_CROSS_GROUP_NO_OVERLAP,
+            rules.RULE_CROSS_GROUP_REST,
         ]
         return GenerateResponse(
             generation_status=GenerationStatus.NO_SOLUTION,
@@ -118,6 +138,29 @@ def generate_schedule(
         care=input_report.care,
         objective=objective,
         validation_report=validation,
-        messages=[*input_report.messages, *validation.messages],
+        messages=[
+            *input_report.messages,
+            *validation.messages,
+            *(
+                []
+                if solver_result.optimization_proven
+                else [
+                    info(
+                        rules.RULE_NO_GUESSING,
+                        "Kandydat spełnia wszystkie reguły twarde; w limicie czasu nie zakończono dowodu optymalności celu leksykograficznego.",
+                        context={
+                            "solverStatus": solver_result.solver_status_name,
+                            "hardValidation": "VALID",
+                        },
+                    )
+                ]
+            ),
+        ],
         next_weekend_variant=next_weekend_variant,
+        optimization_proven=solver_result.optimization_proven,
+        quality_report=build_quality_report(
+            configuration,
+            input_report.care,
+            solver_result.assignments,
+        ),
     )

@@ -12,12 +12,13 @@ const navigation = [
   ["/reguly", "Reguły", "06"],
   ["/podsumowanie", "Podsumowanie", "07"],
   ["/harmonogram", "Harmonogram", "08"],
-  ["/walidacja", "Walidacja", "09"],
+  ["/internat", "Cały internat", "09"],
+  ["/walidacja", "Walidacja", "10"],
 ] as const;
 
 export function Layout() {
   const [open, setOpen] = useState(false);
-  const { configuration, busy, error, clearError, migrationPending } =
+  const { configuration, busy, error, clearError, migrationPending, setActiveGroup } =
     useAppState();
   const online = useOnlineStatus();
   const { canInstall, installed, install } = usePwaInstall();
@@ -83,7 +84,27 @@ export function Layout() {
           </button>
           <div>
             <span className="eyebrow">AKTYWNA KONFIGURACJA</span>
-            <strong>{configuration?.groupName ?? "Brak konfiguracji"}</strong>
+            {configuration ? (
+              <label className="group-switcher">
+                <span className="sr-only">Aktualnie edytowana grupa</span>
+                <select
+                  aria-label="Aktualnie edytowana grupa"
+                  value={configuration.activeGroupId}
+                  onChange={(event) => setActiveGroup(event.target.value)}
+                >
+                  {configuration.groups
+                    .filter((item) => item.active)
+                    .sort((a, b) => a.displayOrder - b.displayOrder)
+                    .map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.code} · {group.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : (
+              <strong>Brak konfiguracji</strong>
+            )}
           </div>
           <div className="topbar__actions">
             {canInstall && (

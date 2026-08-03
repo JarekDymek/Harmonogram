@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def _camel(value: str) -> str:
@@ -79,6 +79,17 @@ class WeekendDay(StrEnum):
     SUNDAY = "SUNDAY"
 
 
+class GroupEducatorRole(StrEnum):
+    PRIMARY = "PRIMARY"
+    SUPPORT = "SUPPORT"
+
+
+class DutyType(StrEnum):
+    NIGHT = "NIGHT"
+    DINING_ROOM = "DINING_ROOM"
+    OTHER = "OTHER"
+
+
 class MessageSeverity(StrEnum):
     ERROR = "ERROR"
     WARNING = "WARNING"
@@ -136,10 +147,12 @@ class TimeInterval(APIModel):
 
 class Educator(APIModel):
     id: str
-    group_id: str
+    # `groupId` i tygodniowy wymiar pozostają przyjmowane wyłącznie po to,
+    # aby bezstratnie migrować zapis schematu v1/v2.
+    group_id: str | None = None
     display_name: str
     short_code: str
-    base_weekly_assigned_minutes: int = Field(ge=0)
+    base_weekly_assigned_minutes: int = Field(default=0, ge=0)
     description: str = ""
     active: bool = True
     can_work_weekends: bool = True
@@ -149,6 +162,7 @@ class EducatorWeekAssignmentOverride(APIModel):
     id: str = Field(default_factory=_id)
     educator_id: str
     configuration_version_id: str
+    group_id: str | None = None
     week_number: int = Field(ge=1, le=6)
     assigned_minutes: int = Field(ge=0)
     reason: str
@@ -185,6 +199,59 @@ class DayCarePlan(APIModel):
     approved: bool = True
     approved_at: datetime | None = None
     approved_by: str | None = None
+
+
+class GroupConfiguration(APIModel):
+    id: str
+    display_order: int = Field(ge=1, le=8)
+    code: str
+    name: str
+    class_label: str = ""
+    active: bool = True
+
+
+class GroupEducatorMembership(APIModel):
+    id: str = Field(default_factory=_id)
+    group_id: str
+    educator_id: str
+    role: GroupEducatorRole = GroupEducatorRole.PRIMARY
+    active: bool = True
+    weekly_target_hours_by_week: list[float] = Field(min_length=1, max_length=6)
+    description: str = ""
+
+
+class ExternalDutyAssignment(APIModel):
+    id: str = Field(default_factory=_id)
+    educator_id: str
+    start_date_time: datetime
+    end_date_time: datetime
+    duty_type: DutyType = DutyType.OTHER
+    locked: bool = True
+    counts_towards_hours: bool = False
+    description: str = ""
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> "ExternalDutyAssignment":
+        if (
+            self.start_date_time.utcoffset() is None
+            or self.end_date_time.utcoffset() is None
+        ):
+            raise ValueError(
+                "Dyżur zewnętrzny wymaga dat i godzin ze strefą czasową."
+            )
+        if self.end_date_time <= self.start_date_time:
+            raise ValueError(
+                "Koniec dyżuru zewnętrznego musi przypadać po początku."
+            )
+        return self
+
+
+class CommonAreaDuty(APIModel):
+    id: str = Field(default_factory=_id)
+    date: Date
+    group_id: str
+    duty_type: DutyType = DutyType.DINING_ROOM
+    description: str = ""
 
 
 class LegalRulesConfiguration(APIModel):
@@ -231,6 +298,7 @@ class OrganizationalRulesConfiguration(APIModel):
     preferred_maximum_segment_minutes: int = 480
     preferred_afternoon_handover_time: str = "17:00"
     preferred_weekend_split_minutes: int = 480
+    short_middle_segment_minutes: int = 180
     split_day_penalty_weight: int = Field(default=1, ge=0)
     preferred_unavailability_penalty_weight: int = Field(default=1, ge=0)
     long_segment_penalty_weight: int = Field(default=1, ge=0)
@@ -255,6 +323,7 @@ class WeekendDayTemplate(APIModel):
 class WeekendRotationVariant(APIModel):
     id: str
     configuration_version_id: str
+    group_id: str | None = None
     variant_kind: WeekendVariantKind
     position_in_cycle: int | None = Field(default=None, ge=1, le=6)
     replaces_weekend_rotation_variant_id: str | None = None
@@ -287,13 +356,18 @@ class BoundaryContext(APIModel):
 
 
 class ScheduleConfiguration(APIModel):
-    schema_version: int = Field(default=2, ge=2)
+    schema_version: int = Field(default=3, ge=2)
     project_id: str
     project_name: str
     configuration_version_id: str
     version_number: int = Field(ge=1)
-    group_id: str
-    group_name: str
+    group_count: int = Field(default=1, ge=1, le=8)
+    groups: list[GroupConfiguration] = Field(default_factory=list)
+    active_group_id: str | None = None
+    selected_group_ids: list[str] = Field(default_factory=list)
+    # Aliasy widoku aktywnej grupy zachowują zgodność z formularzami v2.
+    group_id: str | None = None
+    group_name: str | None = None
     cycle_start_date: Date
     week_start_day: str = "MONDAY"
     time_zone_id: str = "Europe/Warsaw"
@@ -306,16 +380,195 @@ class ScheduleConfiguration(APIModel):
     starting_weekend_variant: int = Field(default=1, ge=1, le=6)
     requested_operation_mode: OperationMode
     educators: list[Educator]
+    group_memberships: list[GroupEducatorMembership] = Field(default_factory=list)
     assignment_overrides: list[EducatorWeekAssignmentOverride] = Field(default_factory=list)
     day_plans: list[DayCarePlan]
     unavailability: list[EducatorUnavailability] = Field(default_factory=list)
     legal_rules: LegalRulesConfiguration
     organizational_rules: OrganizationalRulesConfiguration
     weekend_variants: list[WeekendRotationVariant]
+    external_duty_assignments: list[ExternalDutyAssignment] = Field(default_factory=list)
+    common_area_duties: list[CommonAreaDuty] = Field(default_factory=list)
+    locked_assignments: list["WorkAssignment"] = Field(default_factory=list)
     boundary_context: BoundaryContext | None = None
     solver_time_limit_seconds: float = Field(default=20.0, gt=0, le=300)
     random_seed: int = 20260724
     demonstration_notice: str | None = None
+
+    @model_validator(mode="after")
+    def migrate_legacy_group(self) -> "ScheduleConfiguration":
+        """Normalizuje dawną konfigurację jednej grupy do projektu internatu."""
+        self.schema_version = 3
+        if not self.groups:
+            legacy_group_id = self.group_id or "G1"
+            self.groups = [
+                GroupConfiguration(
+                    id=legacy_group_id,
+                    display_order=1,
+                    code="I",
+                    name=self.group_name or "Grupa I",
+                    active=True,
+                )
+            ]
+            self.group_count = 1
+        active_ids = [item.id for item in self.groups if item.active]
+        if self.active_group_id not in active_ids:
+            self.active_group_id = active_ids[0] if active_ids else self.groups[0].id
+        active_group = next(
+            item for item in self.groups if item.id == self.active_group_id
+        )
+        self.group_id = active_group.id
+        self.group_name = active_group.name
+        if not self.selected_group_ids:
+            self.selected_group_ids = active_ids
+        if not self.group_memberships:
+            for index, educator in enumerate(self.educators):
+                group_id = educator.group_id or active_group.id
+                educator.group_id = None
+                self.group_memberships.append(
+                    GroupEducatorMembership(
+                        id=f"MEM-{group_id}-{educator.id}",
+                        group_id=group_id,
+                        educator_id=educator.id,
+                        role=(
+                            GroupEducatorRole.PRIMARY
+                            if index < 3
+                            else GroupEducatorRole.SUPPORT
+                        ),
+                        weekly_target_hours_by_week=[
+                            educator.base_weekly_assigned_minutes / 60
+                        ]
+                        * self.planning_horizon_weeks,
+                        description=educator.description,
+                    )
+                )
+        for variant in self.weekend_variants:
+            if variant.group_id is None:
+                variant.group_id = active_group.id
+        for override in self.assignment_overrides:
+            if override.group_id is None:
+                membership = next(
+                    (
+                        item
+                        for item in self.group_memberships
+                        if item.educator_id == override.educator_id
+                    ),
+                    None,
+                )
+                override.group_id = (
+                    membership.group_id if membership is not None else active_group.id
+                )
+        return self
+
+    def active_groups(self) -> list[GroupConfiguration]:
+        selected = set(self.selected_group_ids)
+        return [
+            item
+            for item in sorted(self.groups, key=lambda value: value.display_order)
+            if item.active and item.id in selected
+        ]
+
+    def memberships_for_group(self, group_id: str) -> list[GroupEducatorMembership]:
+        return [
+            item
+            for item in self.group_memberships
+            if item.active and item.group_id == group_id
+        ]
+
+    def configuration_for_group(self, group_id: str) -> "ScheduleConfiguration":
+        """Buduje zgodny widok pojedynczej grupy dla kalkulatorów i walidacji."""
+        group = next(item for item in self.groups if item.id == group_id)
+        memberships = self.memberships_for_group(group_id)
+        educator_by_id = {item.id: item for item in self.educators}
+        educators: list[Educator] = []
+        overrides: list[EducatorWeekAssignmentOverride] = []
+        for membership in memberships:
+            source = educator_by_id[membership.educator_id]
+            minutes = [
+                int(round(value * 60))
+                for value in membership.weekly_target_hours_by_week
+            ]
+            while len(minutes) < self.planning_horizon_weeks:
+                minutes.append(minutes[-1])
+            educators.append(
+                source.model_copy(
+                    update={
+                        "group_id": group_id,
+                        "base_weekly_assigned_minutes": minutes[0],
+                    }
+                )
+            )
+            for week_number, assigned in enumerate(minutes[1:], start=2):
+                if assigned == minutes[0]:
+                    continue
+                overrides.append(
+                    EducatorWeekAssignmentOverride(
+                        id=f"MEMBER-TARGET-{membership.id}-{week_number}",
+                        educator_id=membership.educator_id,
+                        configuration_version_id=self.configuration_version_id,
+                        group_id=group_id,
+                        week_number=week_number,
+                        assigned_minutes=assigned,
+                        reason="Wymiar zapisany w członkostwie grupowym.",
+                        approved_at=datetime(1970, 1, 1),
+                        approved_by="MIGRATION",
+                    )
+                )
+        explicit = [
+            item
+            for item in self.assignment_overrides
+            if item.group_id == group_id
+        ]
+        explicit_keys = {(item.educator_id, item.week_number) for item in explicit}
+        overrides = [
+            item
+            for item in overrides
+            if (item.educator_id, item.week_number) not in explicit_keys
+        ] + explicit
+        selected_educator_ids = {item.id for item in educators}
+        return self.model_copy(
+            update={
+                "group_count": 1,
+                "groups": [group],
+                "active_group_id": group_id,
+                "selected_group_ids": [group_id],
+                "group_id": group_id,
+                "group_name": group.name,
+                "educator_count": len(educators),
+                "educators": educators,
+                "group_memberships": memberships,
+                "assignment_overrides": overrides,
+                "day_plans": [
+                    item for item in self.day_plans if item.group_id == group_id
+                ],
+                "unavailability": [
+                    item
+                    for item in self.unavailability
+                    if item.educator_id in selected_educator_ids
+                ],
+                "weekend_variants": [
+                    item
+                    for item in self.weekend_variants
+                    if item.group_id == group_id
+                ],
+                "common_area_duties": [
+                    item
+                    for item in self.common_area_duties
+                    if item.group_id == group_id
+                ],
+                "boundary_context": (
+                    BoundaryContext(
+                        educators=[
+                            item
+                            for item in self.boundary_context.educators
+                            if item.educator_id in selected_educator_ids
+                        ]
+                    )
+                    if self.boundary_context is not None
+                    else None
+                ),
+            }
+        )
 
 
 class CareInterval(APIModel):
@@ -325,6 +578,7 @@ class CareInterval(APIModel):
 
 
 class CalculatedCareDay(APIModel):
+    group_id: str = ""
     date: Date
     week_number: int = Field(ge=1, le=6)
     day_of_week: int = Field(ge=0, le=6)
@@ -339,6 +593,7 @@ class DomainMessage(APIModel):
     message: str
     date: Date | None = None
     educator_id: str | None = None
+    group_id: str | None = None
     start_time: str | None = None
     end_time: str | None = None
     required_value: str | int | float | None = None
@@ -355,6 +610,7 @@ class InputValidationResponse(APIModel):
 
 
 class WorkAssignment(APIModel):
+    group_id: str = ""
     educator_id: str
     date: Date
     start_minute: int
@@ -365,10 +621,39 @@ class ObjectiveBreakdown(APIModel):
     afternoon_penalty: int = 0
     weekend_penalty: int = 0
     split_days_penalty: int = 0
+    continuous_block_handovers: int = 0
+    distinct_educators_per_block: int = 0
+    total_segments: int = 0
+    short_middle_segments: int = 0
     long_segments_penalty: int = 0
     preferred_unavailability_penalty: int = 0
     objective_score: int = 0
     canonical_tie_breaker: int = 0
+
+
+class QualityBlockDetail(APIModel):
+    group_id: str
+    date: Date
+    start_minute: int
+    end_minute: int
+    educator_ids: list[str]
+    handovers: int
+    explanation: str | None = None
+
+
+class WeeklyQualitySummary(APIModel):
+    week_number: int
+    split_work_days: int
+    handovers: int
+    blocks_with_one_educator: int
+    blocks_with_two_educators: int
+    blocks_with_three_educators: int
+    blocks_with_more_educators: int
+    multi_educator_blocks: list[QualityBlockDetail] = Field(default_factory=list)
+
+
+class ScheduleQualityReport(APIModel):
+    weeks: list[WeeklyQualitySummary] = Field(default_factory=list)
 
 
 class ValidationReport(APIModel):
@@ -405,6 +690,8 @@ class GenerateResponse(APIModel):
     conflict_report: ConflictReport | None = None
     messages: list[DomainMessage] = Field(default_factory=list)
     next_weekend_variant: int | None = Field(default=None, ge=1, le=6)
+    quality_report: ScheduleQualityReport | None = None
+    optimization_proven: bool | None = None
 
 
 class ValidateScheduleRequest(APIModel):

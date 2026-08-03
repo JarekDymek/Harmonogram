@@ -10,6 +10,7 @@ import { StartPage } from "./pages/StartPage";
 import { SummaryPage } from "./pages/SummaryPage";
 import { ValidationPage } from "./pages/ValidationPage";
 import { WeekendsPage } from "./pages/WeekendsPage";
+import { InternatPage } from "./pages/InternatPage";
 
 export function App() {
   return (
@@ -23,6 +24,7 @@ export function App() {
         <Route path="reguly" element={<RulesPage />} />
         <Route path="podsumowanie" element={<SummaryPage />} />
         <Route path="harmonogram" element={<SchedulePage />} />
+        <Route path="internat" element={<InternatPage />} />
         <Route path="walidacja" element={<ValidationPage />} />
         <Route path="brak-rozwiazania" element={<NoSolutionPage />} />
         <Route path="*" element={<Navigate replace to="/" />} />
