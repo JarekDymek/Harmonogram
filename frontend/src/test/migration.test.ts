@@ -47,4 +47,19 @@ describe("migracja konfiguracji localStorage", () => {
       configurationFixture.educators.map((item) => item.displayName),
     );
   });
-});
+
+  it("usuwa stare pola główne bez utraty danych grupy", () => {
+    const legacy = {
+      ...configurationFixture,
+      groupCode: "VI",
+      classLabel: "kl. 5",
+    };
+
+    const migrated = migrateConfiguration(legacy);
+
+    expect(migrated).not.toHaveProperty("groupCode");
+    expect(migrated).not.toHaveProperty("classLabel");
+    expect(migrated.groups[0].code).toBe(configurationFixture.groups[0].code);
+    expect(migrated.groups[0].classLabel).toBe(
+      configurationFixture.groups[0].classLabel,
+    );
