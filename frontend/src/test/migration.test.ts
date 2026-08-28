@@ -63,3 +63,5 @@ describe("migracja konfiguracji localStorage", () => {
     expect(migrated.groups[0].classLabel).toBe(
       configurationFixture.groups[0].classLabel,
     );
+  });
+});
