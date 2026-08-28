@@ -52,7 +52,15 @@ function restore<T>(key: string): T | null {
 export function migrateConfiguration(
   source: Partial<ScheduleConfiguration>,
 ): ScheduleConfiguration {
-  const copy = structuredClone(source) as Partial<ScheduleConfiguration>;
+  const copy = structuredClone(source) as Partial<ScheduleConfiguration> & {
+    classLabel?: unknown;
+    groupCode?: unknown;
+  };
+  // These legacy single-group fields now live in groups[]. The backend forbids
+  // unknown root properties, so keeping them would make migrated data fail
+  // request validation even though the schedule itself is complete.
+  delete copy.classLabel;
+  delete copy.groupCode;
   const legacyWeeks =
     typeof copy.planningHorizonWeeks === "number"
       ? copy.planningHorizonWeeks
