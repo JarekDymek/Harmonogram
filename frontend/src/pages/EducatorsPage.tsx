@@ -27,6 +27,15 @@ export function EducatorsPage() {
   const available = configuration.educators.filter(
     (item) => item.active && !memberIds.has(item.id),
   );
+  const incompleteHourMemberships = memberships.filter((membership) =>
+    Array.from(
+      { length: configuration.planningHorizonWeeks },
+      (_, weekIndex) =>
+        (membership.weeklyTargetHoursByWeek[weekIndex] ??
+          membership.weeklyTargetHoursByWeek.at(-1) ??
+          0) <= 0,
+    ).some(Boolean),
+  );
 
   const updateEducator = (educatorId: string, field: "displayName" | "shortCode" | "description", value: string) => {
     setConfiguration({
@@ -55,6 +64,27 @@ export function EducatorsPage() {
         targets[weekIndex] = hours;
         return { ...item, weeklyTargetHoursByWeek: targets };
       }),
+    });
+  };
+
+  const copyFirstWeekToAll = (membershipId: string) => {
+    const membership = configuration.groupMemberships.find(
+      (item) => item.id === membershipId,
+    );
+    const firstWeekHours = membership?.weeklyTargetHoursByWeek[0] ?? 0;
+    if (firstWeekHours <= 0) return;
+    setConfiguration({
+      ...configuration,
+      groupMemberships: configuration.groupMemberships.map((item) =>
+        item.id === membershipId
+          ? {
+              ...item,
+              weeklyTargetHoursByWeek: Array(
+                configuration.planningHorizonWeeks,
+              ).fill(firstWeekHours),
+            }
+          : item,
+      ),
     });
   };
 
@@ -166,8 +196,25 @@ export function EducatorsPage() {
         actions={<button className="button button--secondary" type="button" onClick={addGlobalEducator}>Dodaj osobę do rejestru</button>}
       />
 
-      <section className="section-block">
+      <section className="section-block" id="godziny">
         <div className="section-heading"><div><span className="eyebrow">AKTYWNA GRUPA</span><h2>{memberships.length} członkostwa</h2></div><StatusBadge value={memberships.length >= 3 && memberships.length <= 4 ? "KOMPLET" : "UZUPEŁNIJ"} /></div>
+        <div
+          className={`inline-guidance ${incompleteHourMemberships.length ? "inline-guidance--warning" : "inline-guidance--ok"}`}
+          role="status"
+        >
+          <span aria-hidden="true">{incompleteHourMemberships.length ? "!" : "✓"}</span>
+          <div>
+            <strong>
+              {incompleteHourMemberships.length
+                ? `Uzupełnij godziny dla ${incompleteHourMemberships.length} osób`
+                : "Wymiar godzin jest uzupełniony"}
+            </strong>
+            <p>
+              W każdym tygodniu wpisz liczbę większą niż 0, np. 30 albo 30,5.
+              Wartość zapisze się automatycznie po opuszczeniu pola.
+            </p>
+          </div>
+        </div>
         <div className="educator-grid">
           {memberships.map((membership, index) => {
             const educator = educatorById.get(membership.educatorId)!;
@@ -178,15 +225,42 @@ export function EducatorsPage() {
                 <label>Imię i nazwisko<input value={educator.displayName} onChange={(event) => updateEducator(educator.id, "displayName", event.target.value)} /></label>
                 <label>Skrót<input value={educator.shortCode} onChange={(event) => updateEducator(educator.id, "shortCode", event.target.value)} /></label>
                 {Array.from({ length: configuration.planningHorizonWeeks }, (_, weekIndex) => (
-                  <label key={weekIndex}>
+                  <label
+                    className={
+                      (membership.weeklyTargetHoursByWeek[weekIndex] ??
+                        membership.weeklyTargetHoursByWeek.at(-1) ??
+                        0) <= 0
+                        ? "field-warning"
+                        : ""
+                    }
+                    key={weekIndex}
+                  >
                     Godziny tygodniowo{configuration.planningHorizonWeeks > 1 ? ` · tydzień ${weekIndex + 1}` : ""}
                     <input
                       inputMode="decimal"
+                      aria-invalid={
+                        (membership.weeklyTargetHoursByWeek[weekIndex] ??
+                          membership.weeklyTargetHoursByWeek.at(-1) ??
+                          0) <= 0
+                      }
                       defaultValue={formatPolishHours(membership.weeklyTargetHoursByWeek[weekIndex] ?? membership.weeklyTargetHoursByWeek.at(-1) ?? 0)}
                       onBlur={(event) => updateHours(membership.id, weekIndex, event.target.value)}
                     />
+                    {(membership.weeklyTargetHoursByWeek[weekIndex] ??
+                      membership.weeklyTargetHoursByWeek.at(-1) ??
+                      0) <= 0 && <small>Wpisz więcej niż 0 godzin.</small>}
                   </label>
                 ))}
+                {configuration.planningHorizonWeeks > 1 && (
+                  <button
+                    className="button button--ghost person-card__copy-hours"
+                    type="button"
+                    disabled={(membership.weeklyTargetHoursByWeek[0] ?? 0) <= 0}
+                    onClick={() => copyFirstWeekToAll(membership.id)}
+                  >
+                    Skopiuj tydzień 1 do pozostałych
+                  </button>
+                )}
                 <label>Opis<textarea value={educator.description} onChange={(event) => updateEducator(educator.id, "description", event.target.value)} /></label>
                 {memberships.length === 4 && <button className="button button--ghost" type="button" onClick={() => removeMembership(membership.id)}>Usuń członkostwo</button>}
               </article>

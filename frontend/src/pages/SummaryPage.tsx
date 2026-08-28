@@ -1,4 +1,5 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { getRuleGuidance } from "../help";
 import {
   DemoNotice,
   EmptyState,
@@ -24,6 +25,9 @@ export function SummaryPage() {
     configuration.planningHorizonWeeks *
     7 *
     configuration.selectedGroupIds.length;
+  const errors =
+    inputReport?.messages.filter((item) => item.severity === "ERROR") ?? [];
+  const firstGuidance = errors[0] ? getRuleGuidance(errors[0]) : null;
 
   const runGeneration = async () => {
     const result = await generate();
@@ -40,7 +44,7 @@ export function SummaryPage() {
       <PageHeader
         eyebrow="KROK 07 · KONTROLA WEJŚCIA"
         title="Podsumowanie przed generowaniem"
-        description="Najpierw sprawdzane są struktura, hierarchia planów i dokładny bilans każdego tygodnia. Błędne dane nie uruchomią solvera."
+        description="Najpierw kliknij „Sprawdź dane”. Jeśli coś wymaga poprawy, aplikacja pokaże prostą instrukcję i właściwy formularz."
         actions={
           <>
             <button
@@ -49,7 +53,7 @@ export function SummaryPage() {
               disabled={busy}
               onClick={() => void validateInput()}
             >
-              Sprawdź dane
+              1. Sprawdź dane
             </button>
             <button
               className="button button--primary"
@@ -57,7 +61,7 @@ export function SummaryPage() {
               disabled={busy || inputReport?.status !== "VALID_INPUT"}
               onClick={() => void runGeneration()}
             >
-              {busy ? "Przetwarzanie…" : "Generuj harmonogram"}
+              {busy ? "Przetwarzanie…" : "2. Generuj harmonogram"}
             </button>
           </>
         }
@@ -100,6 +104,22 @@ export function SummaryPage() {
               </strong>
             </div>
           </section>
+          {firstGuidance && (
+            <section className="next-step-card" aria-labelledby="next-step-title">
+              <div>
+                <span className="eyebrow">CO ZROBIĆ TERAZ</span>
+                <h2 id="next-step-title">{firstGuidance.title}</h2>
+                <p>
+                  Wykryto {errors.length} {errors.length === 1 ? "błąd" : "błędy"}.
+                  Zacznij od pierwszej wskazanej pozycji, a następnie ponownie
+                  sprawdź dane.
+                </p>
+              </div>
+              <Link className="button button--primary" to={firstGuidance.actionTo}>
+                {firstGuidance.actionLabel}
+              </Link>
+            </section>
+          )}
           <section className="section-block">
             <div className="section-heading">
               <div>
@@ -164,7 +184,10 @@ export function SummaryPage() {
                 <h2>Raport wejścia</h2>
               </div>
             </div>
-            <MessagesTable messages={inputReport.messages} />
+            <MessagesTable
+              messages={inputReport.messages}
+              configuration={configuration}
+            />
           </section>
         </>
       )}

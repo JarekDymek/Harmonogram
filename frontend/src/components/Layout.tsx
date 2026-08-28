@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { ContextHelp } from "./ContextHelp";
 import { useOnlineStatus, usePwaInstall } from "../pwa";
 import { useAppState } from "../state/AppState";
 
@@ -18,6 +19,8 @@ const navigation = [
 
 export function Layout() {
   const [open, setOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const closeHelp = useCallback(() => setHelpOpen(false), []);
   const { configuration, busy, error, clearError, migrationPending, setActiveGroup } =
     useAppState();
   const online = useOnlineStatus();
@@ -107,6 +110,16 @@ export function Layout() {
             )}
           </div>
           <div className="topbar__actions">
+            <button
+              className="help-button"
+              type="button"
+              aria-controls="context-help"
+              aria-expanded={helpOpen}
+              onClick={() => setHelpOpen(true)}
+            >
+              <span aria-hidden="true">?</span>
+              Podpowiedzi
+            </button>
             {canInstall && (
               <button
                 className="install-button"
@@ -154,6 +167,7 @@ export function Layout() {
           <Outlet />
         </main>
       </div>
+      <ContextHelp open={helpOpen} onClose={closeHelp} />
       {open && (
         <button
           className="sidebar-backdrop"

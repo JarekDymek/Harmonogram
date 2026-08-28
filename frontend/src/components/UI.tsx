@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import type { CareInterval, DomainMessage } from "../types";
+import { Link } from "react-router-dom";
+import { getRuleGuidance } from "../help";
+import type {
+  CareInterval,
+  DomainMessage,
+  ScheduleConfiguration,
+} from "../types";
 import { formatHoursFromMinutes } from "../time";
 
 export const DAY_NAMES = [
@@ -53,7 +59,21 @@ export function EmptyState({
 
 export function StatusBadge({ value }: { value: string }) {
   const normalized = value.toLowerCase().replaceAll("_", "-");
-  return <span className={`status status--${normalized}`}>{value.replaceAll("_", " ")}</span>;
+  const labels: Record<string, string> = {
+    ERROR: "BŁĄD",
+    WARNING: "OSTRZEŻENIE",
+    INFO: "INFORMACJA",
+    INVALID_INPUT: "DANE DO POPRAWY",
+    VALID_INPUT: "DANE POPRAWNE",
+    COMPLETE: "KOMPLET",
+    PRIMARY: "PODSTAWOWY",
+    SUPPORT: "UZUPEŁNIAJĄCY",
+  };
+  return (
+    <span className={`status status--${normalized}`}>
+      {labels[value] ?? value.replaceAll("_", " ")}
+    </span>
+  );
 }
 
 export function minutesToTime(value: number) {
@@ -98,50 +118,93 @@ export function Timeline({ intervals }: { intervals: CareInterval[] }) {
   );
 }
 
-export function MessagesTable({ messages }: { messages: DomainMessage[] }) {
+function messageContext(
+  message: DomainMessage,
+  configuration?: ScheduleConfiguration,
+) {
+  const group = configuration?.groups.find((item) => item.id === message.groupId);
+  const educator = configuration?.educators.find(
+    (item) => item.id === message.educatorId,
+  );
+  return [
+    group ? `Grupa ${group.code} · ${group.name}` : null,
+    educator ? `Osoba: ${educator.displayName}` : null,
+    message.date ? `Data: ${message.date}` : null,
+    message.startTime ? `Od: ${message.startTime}` : null,
+  ].filter((item): item is string => Boolean(item));
+}
+
+export function MessagesTable({
+  messages,
+  configuration,
+}: {
+  messages: DomainMessage[];
+  configuration?: ScheduleConfiguration;
+}) {
   if (!messages.length) {
     return (
       <div className="success-note" role="status">
         <span aria-hidden="true">✓</span>
-        Nie wykryto naruszeń ani ostrzeżeń.
+        Nie wykryto błędów ani ostrzeżeń. Możesz przejść do generowania.
       </div>
     );
   }
+
+  const ordered = [...messages].sort((left, right) => {
+    const rank = { ERROR: 0, WARNING: 1, INFO: 2 };
+    return rank[left.severity] - rank[right.severity];
+  });
+
   return (
-    <div className="table-scroll">
-      <table className="data-table message-table">
-        <thead>
-          <tr>
-            <th>Poziom</th>
-            <th>Reguła</th>
-            <th>Opis</th>
-            <th>Kontekst</th>
-            <th>Wymagane / faktyczne</th>
-          </tr>
-        </thead>
-        <tbody>
-          {messages.map((message, index) => (
-            <tr key={`${message.ruleId}-${index}`}>
-              <td>
+    <div className="message-list">
+      {ordered.map((message, index) => {
+        const guidance = getRuleGuidance(message);
+        const context = messageContext(message, configuration);
+        const hasValues =
+          message.requiredValue !== null &&
+          message.requiredValue !== undefined ||
+          message.actualValue !== null &&
+          message.actualValue !== undefined;
+
+        return (
+          <article
+            className={`message-card message-card--${message.severity.toLowerCase()}`}
+            key={`${message.ruleId}-${index}`}
+          >
+            <div className="message-card__body">
+              <div className="message-card__heading">
                 <StatusBadge value={message.severity} />
-              </td>
-              <td>
+                <div>
+                  <h3>{guidance.title}</h3>
+                  <p>{guidance.explanation}</p>
+                </div>
+              </div>
+              {context.length > 0 && (
+                <div className="message-card__context">
+                  {context.map((item) => (
+                    <span key={item}>{item}</span>
+                  ))}
+                </div>
+              )}
+              <details className="message-details">
+                <summary>Szczegóły techniczne</summary>
+                <p>{message.message}</p>
                 <code>{message.ruleId}</code>
-              </td>
-              <td>{message.message}</td>
-              <td>
-                {[message.groupId, message.date, message.educatorId, message.startTime]
-                  .filter(Boolean)
-                  .join(" · ") || "—"}
-              </td>
-              <td>
-                {messageValue(message.requiredValue, message.ruleId)} /{" "}
-                {messageValue(message.actualValue, message.ruleId)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                {hasValues && (
+                  <p>
+                    Wymagane: {messageValue(message.requiredValue, message.ruleId)}
+                    {" · "}
+                    Faktyczne: {messageValue(message.actualValue, message.ruleId)}
+                  </p>
+                )}
+              </details>
+            </div>
+            <Link className="button button--secondary" to={guidance.actionTo}>
+              {guidance.actionLabel}
+            </Link>
+          </article>
+        );
+      })}
     </div>
   );
 }
