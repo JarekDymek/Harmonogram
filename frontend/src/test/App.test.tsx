@@ -193,4 +193,37 @@ describe("główny przepływ interfejsu", () => {
     expect(screen.getByLabelText("Wymiar kompensacji")).toBeDisabled();
     expect(screen.getByLabelText("Termin kompensacji")).toBeDisabled();
   });
+
+  it("dodaje stałą nockę przez wybór osoby i dnia bez wpisywania dat", async () => {
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v3",
+      JSON.stringify(configurationFixture),
+    );
+    const user = userEvent.setup();
+    const view = renderApp("/wychowawcy");
+
+    await user.selectOptions(
+      screen.getByLabelText("Wychowawca stałej nocki"),
+      "A",
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Dzień rozpoczęcia stałej nocki"),
+      "1",
+    );
+    await user.click(screen.getByRole("button", { name: "Dodaj stałą nockę" }));
+
+    expect(
+      await screen.findByText(/Wychowawca A · wtorek 22:00 → środa 06:00 · co tydzień/i),
+    ).toBeVisible();
+    expect(view.container.querySelector('input[type="datetime-local"]')).toBeNull();
+  });
+
+  it("udostępnia import pakietu także na telefonie bez konfiguracji", () => {
+    renderApp("/urzadzenia");
+    expect(
+      screen.getByRole("heading", { name: "Przenieś plan na telefon" }),
+    ).toBeVisible();
+    expect(screen.getByText(/Na tym urządzeniu nie ma konfiguracji/i)).toBeVisible();
+    expect(screen.getByText("Wybierz pakiet z telefonu")).toBeVisible();
+  });
 });

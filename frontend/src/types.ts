@@ -133,6 +133,13 @@ export interface ExternalDutyAssignment {
   description: string;
 }
 
+export interface RecurringNightDuty {
+  id: string;
+  educatorId: string;
+  startDayOfWeek: number;
+  description: string;
+}
+
 export interface CommonAreaDuty {
   id: string;
   date: string;
@@ -231,6 +238,7 @@ export interface ScheduleConfiguration {
   legalRules: LegalRules;
   organizationalRules: OrganizationalRules;
   weekendVariants: WeekendVariant[];
+  recurringNightDuties?: RecurringNightDuty[];
   externalDutyAssignments: ExternalDutyAssignment[];
   commonAreaDuties: CommonAreaDuty[];
   lockedAssignments: WorkAssignment[];

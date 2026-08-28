@@ -91,6 +91,7 @@ export const configurationFixture: ScheduleConfiguration = {
     afternoonHandoverPenaltyWeight: 1,
   },
   weekendVariants: [],
+  recurringNightDuties: [],
   externalDutyAssignments: [],
   commonAreaDuties: [],
   lockedAssignments: [],

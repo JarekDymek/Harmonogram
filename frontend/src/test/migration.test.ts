@@ -20,6 +20,7 @@ describe("migracja konfiguracji localStorage", () => {
     expect(migrated.educators[0].baseWeeklyAssignedMinutes).toBe(1650);
     expect(migrated.groupCount).toBe(1);
     expect(migrated.groupMemberships[0].weeklyTargetHoursByWeek).toEqual([27.5]);
+    expect(migrated.recurringNightDuties).toEqual([]);
   });
 
   it("nie traci danych konfiguracji schematu 3", () => {

@@ -2115,6 +2115,202 @@ input[readonly] {
   }
 }
 
+.duty-mode-grid,
+.transfer-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.duty-mode-card {
+  border: 1px solid #b9d9d4;
+  border-radius: 18px;
+  padding: 1.4rem;
+  background: #f3fbf9;
+}
+
+.duty-mode-card--additional {
+  border-color: #d8dee2;
+  background: #fafbfc;
+}
+
+.duty-mode-card h3,
+.transfer-preview h3,
+.transfer-callout h2 {
+  margin: 0.35rem 0 0.75rem;
+}
+
+.duty-mode-card .inline-form {
+  align-items: end;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.duty-mode-card,
+.duty-mode-card .inline-form > * {
+  min-width: 0;
+}
+
+.duty-mode-card .inline-form > .fixed-night-hours,
+.duty-mode-card .inline-form > .button {
+  grid-column: 1 / -1;
+}
+
+.duty-mode-card input,
+.duty-mode-card select {
+  width: 100%;
+}
+
+.fixed-night-hours {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 220px;
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  background: #e3f4f0;
+}
+
+.fixed-night-hours small {
+  color: #4f676f;
+}
+
+.form-message {
+  margin: 1rem 0 0;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: #edf7f5;
+  color: #164f51;
+  font-weight: 700;
+}
+
+.transfer-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  border-color: #8bc9c0;
+  background: linear-gradient(135deg, #effaf8 0%, #ffffff 72%);
+}
+
+.transfer-callout p {
+  max-width: 760px;
+  margin-bottom: 0;
+}
+
+.transfer-step {
+  position: relative;
+  overflow: hidden;
+}
+
+.transfer-step__number {
+  position: absolute;
+  top: -1rem;
+  right: 1rem;
+  color: rgba(16, 111, 105, 0.08);
+  font-family: Georgia, serif;
+  font-size: 8rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.transfer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.transfer-file-button {
+  position: relative;
+  display: inline-flex;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.transfer-file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.transfer-preview {
+  margin-top: 1.25rem;
+  padding: 1.25rem;
+  border: 2px solid #77bdb5;
+  border-radius: 16px;
+  background: #f3fbf9;
+}
+
+.transfer-preview dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.transfer-preview dl div {
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.transfer-preview dt {
+  color: #5a6d74;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.transfer-preview dd {
+  margin: 0.25rem 0 0;
+  font-weight: 800;
+}
+
+.transfer-preview ul {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+}
+
+.transfer-message {
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 900px) {
+  .duty-mode-grid,
+  .transfer-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-callout {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .duty-mode-card,
+  .transfer-preview {
+    padding: 1rem;
+  }
+
+  .fixed-night-hours {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .transfer-actions,
+  .transfer-actions .button,
+  .transfer-file-button,
+  .transfer-preview .button {
+    width: 100%;
+  }
+
+  .transfer-preview dl {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Contextual help and actionable validation */
 .help-button {
   display: inline-flex;

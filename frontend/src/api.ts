@@ -3,6 +3,7 @@ import type {
   InputReport,
   ScheduleConfiguration,
 } from "./types";
+import { prepareConfigurationForApi } from "./nightDuties";
 
 const API_BASE_URL_KEY = "harmonogram-mow-api-base-url-v1";
 
@@ -71,19 +72,19 @@ export const api = {
   validate: (configuration: ScheduleConfiguration) =>
     request<InputReport>("/api/validate-input", {
       method: "POST",
-      body: JSON.stringify(configuration),
+      body: JSON.stringify(prepareConfigurationForApi(configuration)),
     }),
   calculateCare: (configuration: ScheduleConfiguration) =>
     request<{ status: string; care: InputReport["care"]; messages: InputReport["messages"] }>(
       "/api/calculate-care",
       {
         method: "POST",
-        body: JSON.stringify(configuration),
+        body: JSON.stringify(prepareConfigurationForApi(configuration)),
       },
     ),
   generate: (configuration: ScheduleConfiguration) =>
     request<GenerateResponse>("/api/generate", {
       method: "POST",
-      body: JSON.stringify(configuration),
+      body: JSON.stringify(prepareConfigurationForApi(configuration)),
     }),
 };
