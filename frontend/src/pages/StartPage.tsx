@@ -132,6 +132,24 @@ export function StartPage() {
           </div>
         </section>
       )}
+      <section className="section-block transfer-callout">
+        <div>
+          <span className="eyebrow">KOMPUTER ↔ TELEFON</span>
+          <h2>{configuration ? "Przenieś ten plan na telefon" : "Masz plan zapisany na innym urządzeniu?"}</h2>
+          <p>
+            Instalacja aplikacji nie kopiuje danych automatycznie. Użyj prywatnego
+            pakietu, aby przenieść nazwiska, godziny, nocki i dostępność bez
+            publikowania ich w internecie.
+          </p>
+        </div>
+        <button
+          className="button button--primary"
+          type="button"
+          onClick={() => navigate("/urzadzenia")}
+        >
+          {configuration ? "Przenieś dane" : "Wczytaj dane z komputera"}
+        </button>
+      </section>
       <section className="section-block api-connection">
         <div className="section-heading">
           <div>

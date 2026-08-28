@@ -40,9 +40,9 @@ const pageHelp: Record<string, PageHelp> = {
     steps: [
       "Sprawdź nazwisko i skrót każdej osoby.",
       "Wpisz więcej niż 0 godzin w każdym polu „Godziny tygodniowo”.",
-      "Dodaj niedostępności i dyżury nocne tylko wtedy, gdy rzeczywiście występują.",
+      "Przy stałej nocce wybierz osobę i dzień rozpoczęcia. Godziny 22:00–06:00 oraz kolejne tygodnie aplikacja uzupełni sama.",
     ],
-    note: "Możesz używać przecinka, np. 30,5. Dane zapisują się po opuszczeniu pola.",
+    note: "Dodatkową nockę lub nadgodziny wpisuj osobno, z konkretną datą. Możesz wtedy zmienić domyślne godziny.",
   },
   "/plany": {
     title: "Plan pobytu wychowanków",
@@ -116,6 +116,16 @@ const pageHelp: Record<string, PageHelp> = {
       "Porównaj zapotrzebowanie z sumą godzin wychowawców.",
       "Poluzuj jedną preferencję i spróbuj ponownie.",
     ],
+  },
+  "/urzadzenia": {
+    title: "Przenoszenie danych między urządzeniami",
+    intro: "Instalacja programu nie kopiuje lokalnych danych. Służy do tego prywatny pakiet.",
+    steps: [
+      "Na komputerze z danymi wybierz „Udostępnij pakiet na telefon” lub pobierz plik.",
+      "Przekaż plik wyłącznie na swój telefon.",
+      "Na telefonie wybierz pakiet, sprawdź podgląd i potwierdź wczytanie.",
+    ],
+    note: "Pakiet zawiera dane osobowe. Nie umieszczaj go w publicznym folderze ani repozytorium.",
   },
 };
 

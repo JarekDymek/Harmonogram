@@ -152,6 +152,7 @@ export function migrateConfiguration(
       ...item,
       groupId: item.groupId ?? legacyGroupId,
     })),
+    recurringNightDuties: copy.recurringNightDuties ?? [],
     organizationalRules: {
       ...copy.organizationalRules!,
       shortMiddleSegmentMinutes:

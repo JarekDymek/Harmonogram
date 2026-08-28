@@ -11,6 +11,7 @@ import { SummaryPage } from "./pages/SummaryPage";
 import { ValidationPage } from "./pages/ValidationPage";
 import { WeekendsPage } from "./pages/WeekendsPage";
 import { InternatPage } from "./pages/InternatPage";
+import { TransferPage } from "./pages/TransferPage";
 
 export function App() {
   return (
@@ -26,6 +27,7 @@ export function App() {
         <Route path="harmonogram" element={<SchedulePage />} />
         <Route path="internat" element={<InternatPage />} />
         <Route path="walidacja" element={<ValidationPage />} />
+        <Route path="urzadzenia" element={<TransferPage />} />
         <Route path="brak-rozwiazania" element={<NoSolutionPage />} />
         <Route path="*" element={<Navigate replace to="/" />} />
       </Route>

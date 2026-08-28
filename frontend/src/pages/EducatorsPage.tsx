@@ -2,12 +2,31 @@ import { useMemo, useState } from "react";
 import { EmptyState, PageHeader, StatusBadge, formatMinutes } from "../components/UI";
 import { useAppState } from "../state/AppState";
 import { formatPolishHours, parsePolishHours } from "../time";
-import type { ExternalDutyAssignment, Unavailability } from "../types";
+import {
+  NIGHT_END_TIME,
+  NIGHT_START_TIME,
+  WEEKDAY_NAMES,
+  createNightAssignment,
+  formatNightDateTime,
+  recurringNightLabel,
+} from "../nightDuties";
+import type { RecurringNightDuty, Unavailability } from "../types";
 
 export function EducatorsPage() {
   const { configuration, generation, setConfiguration } = useAppState();
   const [selectedEducatorId, setSelectedEducatorId] = useState("");
-  const [night, setNight] = useState({ educatorId: "", startDateTime: "", endDateTime: "", description: "" });
+  const [recurringNight, setRecurringNight] = useState({
+    educatorId: "",
+    startDayOfWeek: 1,
+  });
+  const [additionalNight, setAdditionalNight] = useState({
+    educatorId: "",
+    startDate: "",
+    startTime: NIGHT_START_TIME,
+    endTime: NIGHT_END_TIME,
+    description: "",
+  });
+  const [nightMessage, setNightMessage] = useState("");
   const [unavailable, setUnavailable] = useState({ educatorId: "", type: "HARD" as "HARD" | "PREFERRED", dayOfWeek: 0, startTime: "08:00", endTime: "10:00", description: "" });
 
   const activeGroup = configuration?.groups.find(
@@ -141,23 +160,63 @@ export function EducatorsPage() {
     });
   };
 
-  const addNightDuty = () => {
-    if (!night.educatorId || !night.startDateTime || !night.endDateTime) return;
-    const item: ExternalDutyAssignment = {
+  const addRecurringNight = () => {
+    if (!recurringNight.educatorId) return;
+    const recurringNightDuties = configuration.recurringNightDuties ?? [];
+    if (
+      recurringNightDuties.some(
+        (item) =>
+          item.educatorId === recurringNight.educatorId &&
+          item.startDayOfWeek === recurringNight.startDayOfWeek,
+      )
+    ) {
+      setNightMessage("Ta stała nocka jest już wpisana.");
+      return;
+    }
+    const item: RecurringNightDuty = {
       id: crypto.randomUUID(),
-      educatorId: night.educatorId,
-      startDateTime: new Date(night.startDateTime).toISOString(),
-      endDateTime: new Date(night.endDateTime).toISOString(),
-      dutyType: "NIGHT",
-      locked: true,
-      countsTowardsHours: false,
-      description: night.description,
+      educatorId: recurringNight.educatorId,
+      startDayOfWeek: recurringNight.startDayOfWeek,
+      description: "Stała nocka 22:00–06:00, powtarzana co tydzień.",
     };
     setConfiguration({
       ...configuration,
-      externalDutyAssignments: [...configuration.externalDutyAssignments, item],
+      recurringNightDuties: [...recurringNightDuties, item],
     });
-    setNight({ educatorId: "", startDateTime: "", endDateTime: "", description: "" });
+    setRecurringNight({ ...recurringNight, educatorId: "" });
+    setNightMessage("Stała nocka została dodana do każdego tygodnia planu.");
+  };
+
+  const addAdditionalNight = () => {
+    if (!additionalNight.educatorId || !additionalNight.startDate) return;
+    try {
+      const item = createNightAssignment({
+        id: crypto.randomUUID(),
+        educatorId: additionalNight.educatorId,
+        startDate: additionalNight.startDate,
+        startTime: additionalNight.startTime,
+        endTime: additionalNight.endTime,
+        timeZoneId: configuration.timeZoneId,
+        description:
+          additionalNight.description || "Dodatkowa nocka / nadgodziny.",
+      });
+      setConfiguration({
+        ...configuration,
+        externalDutyAssignments: [...configuration.externalDutyAssignments, item],
+      });
+      setAdditionalNight({
+        educatorId: "",
+        startDate: "",
+        startTime: NIGHT_START_TIME,
+        endTime: NIGHT_END_TIME,
+        description: "",
+      });
+      setNightMessage("Dodatkowa nocka została dodana tylko w wybranym terminie.");
+    } catch (caught) {
+      setNightMessage(
+        caught instanceof Error ? caught.message : "Nie udało się dodać nocki.",
+      );
+    }
   };
 
   const addUnavailability = () => {
@@ -297,15 +356,44 @@ export function EducatorsPage() {
         <div className="record-list">{configuration.unavailability.map((item) => <div className="record-row" key={item.id}><span>{educatorById.get(item.educatorId)?.shortCode}</span><strong>{item.type} · {item.startTime}–{item.endTime}</strong><button className="icon-button" type="button" onClick={() => setConfiguration({ ...configuration, unavailability: configuration.unavailability.filter((value) => value.id !== item.id) })}>×</button></div>)}</div>
       </section>
 
-      <section className="section-block">
-        <div className="section-heading"><div><span className="eyebrow">ZABLOKOWANE ZAJĘCIA</span><h2>Dyżury nocne</h2></div></div>
-        <div className="inline-form">
-          <label>Wychowawca<select value={night.educatorId} onChange={(event) => setNight({ ...night, educatorId: event.target.value })}><option value="">Wybierz</option>{configuration.educators.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
-          <label>Początek<input type="datetime-local" value={night.startDateTime} onChange={(event) => setNight({ ...night, startDateTime: event.target.value })} /></label>
-          <label>Koniec<input type="datetime-local" value={night.endDateTime} onChange={(event) => setNight({ ...night, endDateTime: event.target.value })} /></label>
-          <button className="button button--secondary" type="button" onClick={addNightDuty}>Dodaj dyżur</button>
+      <section className="section-block" id="nocki">
+        <div className="section-heading"><div><span className="eyebrow">NOC 22:00–06:00</span><h2>Nocki stałe i dodatkowe</h2></div></div>
+        <div className="inline-guidance inline-guidance--ok" role="status">
+          <span aria-hidden="true">✓</span>
+          <div>
+            <strong>Przy stałej nocce wybierasz tylko osobę i dzień</strong>
+            <p>Aplikacja sama przyjmie pracę od 22:00 do 06:00 następnego dnia i powtórzy ją w każdym tygodniu planu.</p>
+          </div>
         </div>
-        <div className="record-list">{configuration.externalDutyAssignments.map((item) => <div className="record-row" key={item.id}><span>{educatorById.get(item.educatorId)?.shortCode}</span><strong>{item.dutyType} · {item.startDateTime.replace("T", " ").slice(0, 16)}–{item.endDateTime.replace("T", " ").slice(0, 16)}</strong><button className="icon-button" type="button" onClick={() => setConfiguration({ ...configuration, externalDutyAssignments: configuration.externalDutyAssignments.filter((value) => value.id !== item.id) })}>×</button></div>)}</div>
+
+        <div className="duty-mode-grid">
+          <article className="duty-mode-card">
+            <span className="eyebrow">STAŁA NOCKA · CO TYDZIEŃ</span>
+            <h3>Dodaj raz — obowiązuje do usunięcia</h3>
+            <div className="inline-form">
+              <label>Wychowawca<select aria-label="Wychowawca stałej nocki" value={recurringNight.educatorId} onChange={(event) => setRecurringNight({ ...recurringNight, educatorId: event.target.value })}><option value="">Wybierz</option>{configuration.educators.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
+              <label>Dzień rozpoczęcia<select aria-label="Dzień rozpoczęcia stałej nocki" value={recurringNight.startDayOfWeek} onChange={(event) => setRecurringNight({ ...recurringNight, startDayOfWeek: Number(event.target.value) })}>{WEEKDAY_NAMES.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></label>
+              <div className="fixed-night-hours"><small>Godziny ustawione automatycznie</small><strong>22:00 → 06:00 następnego dnia</strong></div>
+              <button className="button button--primary" type="button" disabled={!recurringNight.educatorId} onClick={addRecurringNight}>Dodaj stałą nockę</button>
+            </div>
+            <div className="record-list">{(configuration.recurringNightDuties ?? []).map((item) => <div className="record-row" key={item.id}><span>{educatorById.get(item.educatorId)?.shortCode}</span><strong>{educatorById.get(item.educatorId)?.displayName} · {recurringNightLabel(item.startDayOfWeek)} · co tydzień</strong><button className="icon-button" type="button" aria-label={`Usuń stałą nockę ${educatorById.get(item.educatorId)?.displayName ?? "wychowawcy"}`} onClick={() => setConfiguration({ ...configuration, recurringNightDuties: (configuration.recurringNightDuties ?? []).filter((value) => value.id !== item.id) })}>×</button></div>)}</div>
+          </article>
+
+          <article className="duty-mode-card duty-mode-card--additional">
+            <span className="eyebrow">DODATKOWA NOCKA / NADGODZINY</span>
+            <h3>Jedna konkretna data</h3>
+            <p className="section-copy">Domyślnie 22:00–06:00. Godziny zmień tylko wtedy, gdy wychowawca ma przyjść wcześniej lub skończyć inaczej.</p>
+            <div className="inline-form">
+              <label>Wychowawca<select aria-label="Wychowawca dodatkowej nocki" value={additionalNight.educatorId} onChange={(event) => setAdditionalNight({ ...additionalNight, educatorId: event.target.value })}><option value="">Wybierz</option>{configuration.educators.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
+              <label>Data rozpoczęcia<input aria-label="Data rozpoczęcia dodatkowej nocki" type="date" value={additionalNight.startDate} onChange={(event) => setAdditionalNight({ ...additionalNight, startDate: event.target.value })} /></label>
+              <label>Od<input aria-label="Początek dodatkowej nocki" type="time" step="1800" value={additionalNight.startTime} onChange={(event) => setAdditionalNight({ ...additionalNight, startTime: event.target.value })} /></label>
+              <label>Do następnego dnia<input aria-label="Koniec dodatkowej nocki" type="time" step="1800" value={additionalNight.endTime} onChange={(event) => setAdditionalNight({ ...additionalNight, endTime: event.target.value })} /></label>
+              <button className="button button--secondary" type="button" disabled={!additionalNight.educatorId || !additionalNight.startDate} onClick={addAdditionalNight}>Dodaj tylko ten dyżur</button>
+            </div>
+            <div className="record-list">{configuration.externalDutyAssignments.filter((item) => item.dutyType === "NIGHT").map((item) => <div className="record-row" key={item.id}><span>{educatorById.get(item.educatorId)?.shortCode}</span><strong>{educatorById.get(item.educatorId)?.displayName} · {formatNightDateTime(item.startDateTime, configuration.timeZoneId)}–{formatNightDateTime(item.endDateTime, configuration.timeZoneId)}</strong><button className="icon-button" type="button" aria-label={`Usuń dodatkową nockę ${educatorById.get(item.educatorId)?.displayName ?? "wychowawcy"}`} onClick={() => setConfiguration({ ...configuration, externalDutyAssignments: configuration.externalDutyAssignments.filter((value) => value.id !== item.id) })}>×</button></div>)}</div>
+          </article>
+        </div>
+        {nightMessage && <p className="form-message" role="status">{nightMessage}</p>}
       </section>
     </>
   );

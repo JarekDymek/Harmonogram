@@ -56,6 +56,9 @@ pola oznacza API dostępne pod tym samym adresem.
 - polskie raporty zawierające stabilne `ruleId`;
 - tygodniowy i osobowy widok harmonogramu na komputerze i telefonie;
 - wersjonowany lokalny zapis konfiguracji, wyniku i raportu w `localStorage`;
+- prywatny eksport/import pełnej konfiguracji między komputerem i telefonem;
+- stałe nocki wybierane jako osoba i dzień tygodnia, automatycznie rozwijane
+  do dyżurów 22:00–06:00 w każdym tygodniu planu;
 - interfejs godzinowy z obsługą polskiego przecinka i krokiem 0,5 godziny.
 - twardy zakaz powrotu `A–B–A` w jednym ciągłym bloku opieki;
 - równoważna optymalizacja leksykograficzna: dni dzielone, przekazania,
@@ -274,7 +277,8 @@ Historyczne raporty spójności nie zostały zmodyfikowane przez implementację.
 
 - brak bazy danych, kont użytkowników, uprawnień i pracy wielostanowiskowej;
 - konfiguracja i wyniki są przechowywane w przeglądarce;
-- brak importu/eksportu JSON w interfejsie;
+- dane nie synchronizują się automatycznie; użytkownik przenosi je prywatnym
+  pakietem `.harmonogram.json` z podglądem przed importem;
 - brak automatycznego tworzenia zastępstw i wariantów weekendowych;
 - raport konfliktu solvera ma jawnie oznaczoną jakość `APPROXIMATE` i nie
   deklaruje minimalnego rdzenia sprzeczności;
@@ -282,8 +286,8 @@ Historyczne raporty spójności nie zostały zmodyfikowane przez implementację.
   a następnie optymalizuje go leksykograficznie; jeżeli limit przerwie dowód
   optymalności, poprawny kandydat jest publikowany z oznaczeniem
   `NAJLEPSZA ZNALEZIONA`, nie jako optimum udowodnione;
-- automatyczne układanie dyżurów nocnych nie jest jeszcze wykonywane — są one
-  wprowadzane ręcznie jako zablokowane zajęcia;
+- stałe dyżury nocne są blokowane automatycznie w każdym tygodniu; dodatkowe
+  nocki i nadgodziny nadal wymagają wskazania konkretnej daty;
 - dyżur stołówkowy jest obecnie informacyjnym przydziałem grupy bez godzin
   konkretnej osoby;
 - prawdziwe użycie wymaga zastąpienia danych demonstracyjnych zatwierdzonymi
