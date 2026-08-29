@@ -30,8 +30,45 @@ describe("pomoc kontekstowa", () => {
 
   it("kieruje błędy planu dnia do planu pobytu", () => {
     expect(getRuleGuidance(message("REQ-COVERAGE-001")).actionTo).toBe(
-      "/plany",
+      "/plany#plany-tygodniowe",
     );
+  });
+
+  it("wyjaśnia, że błąd poniedziałku nie dotyczy bilansu godzin", () => {
+    const guidance = getRuleGuidance(
+      message(
+        "REQ-CROSS-WEEK-001",
+        "Cykl musi rozpoczynać się w poniedziałek, a weekStartDay musi wynosić MONDAY.",
+      ),
+    );
+
+    expect(guidance.actionTo).toBe("/konfiguracja#data-poczatku-cyklu");
+    expect(guidance.destination).toContain("Początek cyklu");
+    expect(guidance.explanation).toContain("Godziny tygodniowe mogą być prawidłowe");
+  });
+
+  it("prowadzi błąd pozycji weekendowej do dokładnej karty", () => {
+    const weekendMessage = message("REQ-WEEKEND-001");
+    weekendMessage.context = { position: 4 };
+
+    const guidance = getRuleGuidance(weekendMessage);
+
+    expect(guidance.actionTo).toBe("/weekendy#weekend-pozycja-4");
+    expect(guidance.destination).toBe("Weekendy → pozycja 4");
+  });
+
+  it("prowadzi konflikt planu weekendu do wariantu zastępczego", () => {
+    const weekendMessage = message(
+      "REQ-SPECIAL-DAY-001",
+      "Weekendowy popyt różni się od wzorca bazowego i brakuje zgodnego SUBSTITUTE.",
+    );
+    weekendMessage.date = "2026-09-05";
+    weekendMessage.context = { weekNumber: 1, baseVariantId: "WEEKEND-1" };
+
+    const guidance = getRuleGuidance(weekendMessage);
+
+    expect(guidance.actionTo).toBe("/weekendy#dzien-specjalny-weekend");
+    expect(guidance.explanation).toContain("Bilans godzin nie jest tu problemem");
   });
 
   it("ma instrukcję dla każdego głównego kroku", () => {

@@ -216,6 +216,7 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
                 "Cykl musi rozpoczynać się w poniedziałek, a weekStartDay musi wynosić MONDAY.",
                 required="poniedziałek / MONDAY",
                 actual=f"{configuration.cycle_start_date:%A} / {configuration.week_start_day}",
+                context={"field": "cycleStartDate"},
             )
         )
     if (

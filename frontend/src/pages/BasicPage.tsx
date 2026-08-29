@@ -410,7 +410,7 @@ export function BasicPage() {
               <option value={3}>3 osoby</option><option value={4}>4 osoby</option>
             </select>
           </label>
-          <label>Początek cyklu (poniedziałek)<input type="date" {...register("cycleStartDate")} />{errors.cycleStartDate && <em>{errors.cycleStartDate.message}</em>}</label>
+          <label id="data-poczatku-cyklu">Początek cyklu (poniedziałek)<input type="date" {...register("cycleStartDate")} />{errors.cycleStartDate && <em>{errors.cycleStartDate.message}</em>}</label>
           <label>Strefa czasu IANA<input {...register("timeZoneId")} /></label>
           <label>
             Horyzont planowania

@@ -356,7 +356,12 @@ export function RulesPage() {
       {configuration.legalRules.verificationStatus !== "VERIFIED" && (
         <DemoNotice />
       )}
-      <form className="stack" onSubmit={handleSubmit(submit)} noValidate>
+      <form
+        className="stack"
+        id="reguly-organizacyjne"
+        onSubmit={handleSubmit(submit)}
+        noValidate
+      >
         <section className="form-card">
           <div className="section-heading">
             <div>

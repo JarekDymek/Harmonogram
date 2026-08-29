@@ -167,7 +167,7 @@ export function WeekendsPage() {
           </button>
         }
       />
-      <div className="weekend-grid">
+      <div className="weekend-grid" id="wzorce-weekendowe">
         {base.map((variant) => {
           const working = new Set([
             ...variant.saturdayTemplate.assignments.map(
@@ -182,7 +182,11 @@ export function WeekendsPage() {
             .map((item) => item.shortCode)
             .join(", ");
           return (
-          <article className="weekend-card" key={variant.id}>
+          <article
+            className="weekend-card"
+            id={`weekend-pozycja-${variant.positionInCycle}`}
+            key={variant.id}
+          >
             <header>
               <div>
                 <span className="card-number">
@@ -268,7 +272,7 @@ export function WeekendsPage() {
           );
         })}
       </div>
-      <section className="section-block">
+      <section className="section-block" id="dzien-specjalny-weekend">
         <div className="section-heading">
           <div>
             <span className="eyebrow">DZIEŃ SPECJALNY W WEEKEND</span>
@@ -338,7 +342,11 @@ export function WeekendsPage() {
         {substitutes.length ? (
           <div className="record-list">
             {substitutes.map((item) => (
-              <article className="substitute-card" key={item.id}>
+              <article
+                className="substitute-card"
+                id={`weekend-zastepczy-${item.id}`}
+                key={item.id}
+              >
                 <div className="record-row">
                   <div>
                     <strong>

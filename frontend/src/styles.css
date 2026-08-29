@@ -2267,6 +2267,16 @@ input[readonly] {
   font-size: 0.8rem;
 }
 
+.next-step-card .next-step-card__destination {
+  margin-top: 9px;
+  color: var(--ink);
+}
+
+.next-step-card .next-step-card__count {
+  margin-top: 5px;
+  font-size: 0.72rem;
+}
+
 .message-list {
   display: grid;
   gap: 12px;
@@ -2324,6 +2334,18 @@ input[readonly] {
   color: #3e535f;
   font-size: 0.67rem;
   font-weight: 700;
+}
+
+.message-card__destination {
+  margin: 11px 0 0 78px;
+  color: var(--ink);
+  font-size: 0.73rem;
+}
+
+.repair-target {
+  scroll-margin-top: 110px;
+  outline: 4px solid rgba(201, 147, 31, 0.58);
+  box-shadow: 0 0 0 8px rgba(201, 147, 31, 0.14);
 }
 
 .message-details {
@@ -2454,6 +2476,7 @@ input[readonly] {
   }
 
   .message-card__context,
+  .message-card__destination,
   .message-details {
     margin-left: 0;
   }

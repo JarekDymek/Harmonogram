@@ -27,6 +27,7 @@ describe("komponenty raportowe", () => {
     expect(
       within(card).getByRole("link", { name: "Uzupełnij godziny" }),
     ).toHaveAttribute("href", "/wychowawcy#godziny");
+    expect(within(card).getByText(/Miejsce do poprawy:/)).toBeVisible();
     expect(within(card).getByText("REQ-HOURS-001")).toBeInTheDocument();
   });
 
@@ -44,5 +45,27 @@ describe("komponenty raportowe", () => {
     );
     expect(screen.getByLabelText("Wymagane przedziały opieki")).toBeVisible();
     expect(screen.getByTitle("06:00–08:00")).toBeVisible();
+  });
+
+  it("pokazuje numer pozycji weekendu przed przejściem do naprawy", () => {
+    render(
+      <MemoryRouter>
+        <MessagesTable
+          messages={[
+            {
+              ruleId: "REQ-WEEKEND-001",
+              severity: "ERROR",
+              message: "Wariant weekendowy jest niepełny.",
+              context: { position: 3 },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Pozycja weekendu: 3")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Przejdź do tego weekendu" }),
+    ).toHaveAttribute("href", "/weekendy#weekend-pozycja-3");
   });
 });

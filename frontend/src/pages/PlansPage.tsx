@@ -197,7 +197,7 @@ export function PlansPage() {
           </button>
         }
       />
-      <section className="plan-list">
+      <section className="plan-list" id="plany-tygodniowe">
         {basePlans.map((plan) => {
           const intervals = preview(plan);
           const total = intervals.reduce(
@@ -205,7 +205,11 @@ export function PlansPage() {
             0,
           );
           return (
-            <article className="plan-row" key={plan.id}>
+            <article
+              className="plan-row"
+              id={`plan-dzien-${plan.dayOfWeek ?? 0}`}
+              key={plan.id}
+            >
               <div className="plan-row__day">
                 <span>{String((plan.dayOfWeek ?? 0) + 1).padStart(2, "0")}</span>
                 <strong>{DAY_NAMES[plan.dayOfWeek ?? 0]}</strong>
@@ -285,7 +289,7 @@ export function PlansPage() {
         })}
       </section>
 
-      <section className="section-block">
+      <section className="section-block" id="plany-szczegolne">
         <div className="section-heading">
           <div>
             <span className="eyebrow">PEŁNE ZASTĄPIENIE</span>
@@ -358,7 +362,11 @@ export function PlansPage() {
         </form>
         <div className="record-list">
           {exceptions.map((item) => (
-            <div className="record-row" key={item.id}>
+            <div
+              className="record-row"
+              id={`plan-szczegolny-${item.id}`}
+              key={item.id}
+            >
               <div>
                 <strong>
                   {item.scope === "SPECIFIC_DATE"

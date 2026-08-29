@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useCallback, useState } from "react";
 import { ContextHelp } from "./ContextHelp";
+import { HashFocus } from "./HashFocus";
 import { useOnlineStatus, usePwaInstall } from "../pwa";
 import { useAppState } from "../state/AppState";
 
@@ -27,6 +28,7 @@ export function Layout() {
   const { canInstall, installed, install } = usePwaInstall();
   return (
     <div className="app-shell">
+      <HashFocus />
       <a className="skip-link" href="#main-content">
         Przejdź do treści
       </a>
