@@ -1,8 +1,9 @@
-import { EmptyState, PageHeader, StatusBadge } from "../components/UI";
+import { Link } from "react-router-dom";
+import { EmptyState, MessagesTable, PageHeader, StatusBadge } from "../components/UI";
 import { useAppState } from "../state/AppState";
 
 export function NoSolutionPage() {
-  const { generation } = useAppState();
+  const { configuration, generation } = useAppState();
   const conflict = generation?.conflictReport;
   if (!conflict) {
     return (
@@ -15,30 +16,50 @@ export function NoSolutionPage() {
     <>
       <PageHeader
         eyebrow="BRAK ROZWIĄZANIA"
-        title="Warunki nie mogą być spełnione jednocześnie"
-        description={conflict.summary}
+        title="Nie udało się jeszcze ułożyć planu"
+        description="Nie zmieniaj wszystkich danych. Zacznij od pierwszej konkretnej wskazówki poniżej."
       />
-      <section className="conflict-card">
-        <header>
+      <section className="next-step-card next-step-card--error">
+        <div>
+          <span className="eyebrow">CO ZROBIĆ TERAZ</span>
+          <h2>Zacznij od pierwszej wskazanej pozycji</h2>
+          <p>{conflict.summary}</p>
+        </div>
+        <Link className="button button--secondary" to="/podsumowanie">
+          Sprawdź dane ponownie
+        </Link>
+      </section>
+      <section className="section-block">
+        <div className="section-heading">
           <div>
-            <small>Jakość analizy</small>
-            <StatusBadge value={conflict.conflictAnalysisQuality} />
+            <span className="eyebrow">KONKRETNE WSKAZÓWKI</span>
+            <h2>Co blokuje plan</h2>
           </div>
-          <strong>{conflict.conflictingRuleIds.length} grup reguł</strong>
-        </header>
-        <div className="conflict-columns">
+        </div>
+        <MessagesTable
+          messages={generation?.messages ?? []}
+          configuration={configuration ?? undefined}
+        />
+      </section>
+      <details className="section-block summary-details">
+        <summary>
+          <span>
+            <span className="eyebrow">DLA SERWISU</span>
+            <strong>Pokaż informacje techniczne</strong>
+          </span>
+          <span aria-hidden="true">＋</span>
+        </summary>
+        <div className="summary-details__content conflict-columns">
           <div>
-            <h2>Reguły do sprawdzenia</h2>
+            <h2>Reguły</h2>
             <ul>
               {conflict.conflictingRuleIds.map((item) => (
-                <li key={item}>
-                  <code>{item}</code>
-                </li>
+                <li key={item}><code>{item}</code></li>
               ))}
             </ul>
           </div>
           <div>
-            <h2>Dane wejściowe</h2>
+            <h2>Pola wejściowe</h2>
             <ul>
               {conflict.inputFieldsToReview.map((item) => (
                 <li key={item}>{item}</li>
@@ -46,16 +67,11 @@ export function NoSolutionPage() {
             </ul>
           </div>
           <div>
-            <h2>Osoby i daty</h2>
-            <p>{conflict.educatorIds.join(", ") || "—"}</p>
-            <p>
-              {conflict.dates.length
-                ? `${conflict.dates[0]} – ${conflict.dates.at(-1)}`
-                : "—"}
-            </p>
+            <h2>Jakość analizy</h2>
+            <StatusBadge value={conflict.conflictAnalysisQuality} />
           </div>
         </div>
-      </section>
+      </details>
     </>
   );
 }

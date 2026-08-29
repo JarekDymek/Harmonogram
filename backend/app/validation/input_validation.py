@@ -1041,16 +1041,237 @@ def _weekly_balance(
         }
         balances.append(balance)
         if required != assigned:
+            difference = abs(required - assigned)
+            if assigned < required:
+                description = (
+                    f"W tygodniu {week_number} brakuje {difference / 60:g} godz. "
+                    f"Plan wymaga {required / 60:g} godz., a wychowawcom "
+                    f"wpisano razem {assigned / 60:g} godz."
+                )
+            else:
+                description = (
+                    f"W tygodniu {week_number} wpisano za dużo o "
+                    f"{difference / 60:g} godz. Plan wymaga {required / 60:g} "
+                    f"godz., a wychowawcom wpisano razem {assigned / 60:g} godz."
+                )
             messages.append(
                 error(
                     rules.RULE_HOURS,
-                    f"Bilans tygodnia {week_number} nie jest równy zapotrzebowaniu.",
+                    description,
                     required=required,
                     actual=assigned,
                     context=balance,
                 )
             )
     return balances, messages
+
+
+def _fixed_weekend_conflict_messages(
+    configuration: ScheduleConfiguration,
+) -> list[DomainMessage]:
+    """Wykrywa oczywisty konflikt stałej nocki z wymuszonym weekendem.
+
+    Taki konflikt nie wymaga uruchamiania solvera: godziny mogą się zgadzać,
+    ale ta sama osoba nie może zachować wymaganego odpoczynku pomiędzy
+    zatwierdzonym odcinkiem weekendowym i zablokowanym dyżurem nocnym.
+    """
+    messages: list[DomainMessage] = []
+    project_zone = zone(configuration.time_zone_id)
+    educator_by_id = {
+        item.id: item for item in configuration.educators if item.active
+    }
+    minimum_rest = configuration.legal_rules.minimum_daily_rest_minutes
+    recurring_prefix = "RECURRING-NIGHT-"
+
+    for week_number in range(1, configuration.planning_horizon_weeks + 1):
+        saturday = configuration.cycle_start_date + timedelta(
+            days=(week_number - 1) * 7 + 5
+        )
+        sunday = saturday + timedelta(days=1)
+        try:
+            variant = selected_weekend_variant(
+                configuration,
+                week_number=week_number,
+                saturday=saturday,
+                sunday=sunday,
+            )
+        except ValueError:
+            # Brak albo duplikat wzorca ma już własny, prostszy komunikat
+            # z _weekend_compatibility. Nie zasłaniamy go wyjątkiem.
+            continue
+        weekend_start = aware_local_datetime(
+            saturday,
+            0,
+            configuration.time_zone_id,
+        )
+        weekend_end = aware_local_datetime(
+            sunday,
+            1440,
+            configuration.time_zone_id,
+        )
+        forced_segments: dict[str, list[tuple[object, object, str]]] = defaultdict(list)
+        for target_date, template in (
+            (saturday, variant.saturday_template),
+            (sunday, variant.sunday_template),
+        ):
+            for assignment in template.assignments:
+                start_minute = parse_hhmm(assignment.start_time)
+                end_minute = parse_hhmm(assignment.end_time)
+                forced_segments[assignment.educator_id].append(
+                    (
+                        aware_local_datetime(
+                            target_date,
+                            start_minute,
+                            configuration.time_zone_id,
+                        ),
+                        aware_local_datetime(
+                            target_date,
+                            end_minute,
+                            configuration.time_zone_id,
+                        ),
+                        f"{target_date} {assignment.start_time}–{assignment.end_time}",
+                    )
+                )
+
+        for unavailable in configuration.unavailability:
+            if unavailable.type != "HARD":
+                continue
+            for target_date in (saturday, sunday):
+                applies = (
+                    unavailable.day_of_week == target_date.weekday()
+                    if unavailable.scope == UnavailabilityScope.RECURRING_WEEKLY
+                    else (
+                        unavailable.week_number == week_number
+                        and unavailable.day_of_week == target_date.weekday()
+                        if unavailable.scope == UnavailabilityScope.CYCLE_WEEK
+                        else unavailable.date == target_date
+                    )
+                )
+                if not applies:
+                    continue
+                unavailable_start = aware_local_datetime(
+                    target_date,
+                    parse_hhmm(unavailable.start_time),
+                    configuration.time_zone_id,
+                )
+                unavailable_end = aware_local_datetime(
+                    target_date,
+                    parse_hhmm(unavailable.end_time),
+                    configuration.time_zone_id,
+                )
+                overlapping = [
+                    label
+                    for segment_start, segment_end, label in forced_segments.get(
+                        unavailable.educator_id,
+                        [],
+                    )
+                    if segment_start < unavailable_end
+                    and unavailable_start < segment_end
+                ]
+                if not overlapping:
+                    continue
+                educator = educator_by_id.get(unavailable.educator_id)
+                name = (
+                    educator.display_name
+                    if educator
+                    else unavailable.educator_id
+                )
+                position = variant.position_in_cycle or week_number
+                messages.append(
+                    error(
+                        rules.RULE_HARD_UNAVAILABLE,
+                        (
+                            f"{name} ma bezwzględną niedostępność "
+                            f"{target_date} {unavailable.start_time}–"
+                            f"{unavailable.end_time}, ale pozycja weekendu "
+                            f"{position} przypisuje tej osobie dyżur "
+                            f"{', '.join(overlapping)}. Wybierz inną osobę "
+                            "w tym weekendzie albo popraw ten konkretny wpis "
+                            "niedostępności."
+                        ),
+                        date_value=target_date,
+                        educator_id=unavailable.educator_id,
+                        group_id=configuration.group_id,
+                        start_time=unavailable.start_time,
+                        end_time=unavailable.end_time,
+                        context={
+                            "conflictType": "HARD_UNAVAILABILITY_WEEKEND",
+                            "weekNumber": week_number,
+                            "position": position,
+                            "dayOfWeek": target_date.weekday(),
+                            "unavailabilityId": unavailable.id,
+                            "variantId": variant.id,
+                        },
+                    )
+                )
+
+        for duty in configuration.external_duty_assignments:
+            if not duty.locked or duty.duty_type != "NIGHT":
+                continue
+            segments = forced_segments.get(duty.educator_id, [])
+            if not segments:
+                continue
+            duty_start = duty.start_date_time.astimezone(project_zone)
+            duty_end = duty.end_date_time.astimezone(project_zone)
+            if duty_end <= weekend_start or duty_start >= weekend_end:
+                continue
+
+            conflicts: list[tuple[int, str]] = []
+            for segment_start, segment_end, label in segments:
+                if segment_end <= duty_start:
+                    gap = int((duty_start - segment_end).total_seconds() // 60)
+                elif duty_end <= segment_start:
+                    gap = int((segment_start - duty_end).total_seconds() // 60)
+                else:
+                    gap = -1
+                if gap < minimum_rest:
+                    conflicts.append((gap, label))
+            if not conflicts:
+                continue
+
+            educator = educator_by_id.get(duty.educator_id)
+            name = educator.display_name if educator else duty.educator_id
+            minimum_gap = min(value for value, _ in conflicts)
+            actual_rest = max(0, minimum_gap)
+            duty_label = (
+                "Stała nocka"
+                if duty.id.startswith(recurring_prefix)
+                else "Nocka"
+            )
+            weekend_description = ", ".join(label for _, label in conflicts)
+            position = variant.position_in_cycle or week_number
+            messages.append(
+                error(
+                    rules.RULE_CROSS_GROUP_REST,
+                    (
+                        f"{duty_label} {name}: "
+                        f"{duty_start:%Y-%m-%d %H:%M}–{duty_end:%Y-%m-%d %H:%M} "
+                        f"koliduje z dzienną pracą w pozycji weekendu {position} "
+                        f"({weekend_description}). Odpoczynek wynosi "
+                        f"{actual_rest / 60:g} godz., a wymagane jest "
+                        f"{minimum_rest / 60:g} godz. W tym weekendzie wybierz "
+                        "inną osobę do pracy dziennej albo zmień nockę."
+                    ),
+                    date_value=saturday,
+                    educator_id=duty.educator_id,
+                    group_id=configuration.group_id,
+                    required=minimum_rest,
+                    actual=actual_rest,
+                    context={
+                        "conflictType": "NIGHT_WEEKEND_REST",
+                        "weekNumber": week_number,
+                        "position": position,
+                        "dutyId": duty.id,
+                        "variantId": variant.id,
+                        "dutyStart": duty_start.isoformat(),
+                        "dutyEnd": duty_end.isoformat(),
+                        "weekendAssignments": [
+                            label for _, label in conflicts
+                        ],
+                    },
+                )
+            )
+    return messages
 
 
 def _weekend_compatibility(
@@ -1145,6 +1366,7 @@ def validate_configuration(
     balances, balance_messages = _weekly_balance(configuration, care)
     messages.extend(balance_messages)
     messages.extend(_weekend_compatibility(configuration, care))
+    messages.extend(_fixed_weekend_conflict_messages(configuration))
     if configuration.schedule_boundary_mode == ScheduleBoundaryMode.FINITE:
         contexts = (
             {

@@ -15,18 +15,25 @@ describe("komponenty raportowe", () => {
               message: "Bilans tygodnia jest niepoprawny.",
               requiredValue: 4920,
               actualValue: 4950,
-              context: { weekNumber: 1 },
+              context: {
+                weekNumber: 1,
+                requiredMinutes: 4920,
+                assignedMinutes: 4950,
+                differenceMinutes: 30,
+              },
             },
           ]}
         />
       </MemoryRouter>,
     );
     const card = screen.getByRole("article");
-    expect(within(card).getByText("Sprawdź wymiar godzin")).toBeVisible();
+    expect(
+      within(card).getByText("W tygodniu 1 wpisano za dużo o 0,5 godz."),
+    ).toBeVisible();
     expect(within(card).getByText("BŁĄD")).toBeVisible();
     expect(
-      within(card).getByRole("link", { name: "Uzupełnij godziny" }),
-    ).toHaveAttribute("href", "/wychowawcy#godziny");
+      within(card).getByRole("link", { name: "Popraw tydzień 1" }),
+    ).toHaveAttribute("href", "/wychowawcy#godziny-tydzien-1");
     expect(within(card).getByText(/Miejsce do poprawy:/)).toBeVisible();
     expect(within(card).getByText("REQ-HOURS-001")).toBeInTheDocument();
   });

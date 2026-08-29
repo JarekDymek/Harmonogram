@@ -28,6 +28,28 @@ describe("pomoc kontekstowa", () => {
     expect(guidance.explanation).toContain("większą niż 0");
   });
 
+  it("podaje dokładną różnicę sumy i prowadzi do właściwego tygodnia", () => {
+    const balanceMessage = message(
+      "REQ-HOURS-001",
+      "W tygodniu 2 brakuje godzin.",
+    );
+    balanceMessage.groupId = "G1";
+    balanceMessage.context = {
+      weekNumber: 2,
+      requiredMinutes: 6000,
+      assignedMinutes: 5880,
+      differenceMinutes: -120,
+    };
+
+    const guidance = getRuleGuidance(balanceMessage);
+
+    expect(guidance.title).toBe("W tygodniu 2 brakuje 2 godz.");
+    expect(guidance.explanation).toContain("Zwiększ łączną liczbę godzin");
+    expect(guidance.actionTo).toBe(
+      "/wychowawcy?grupa=G1#godziny-tydzien-2",
+    );
+  });
+
   it("kieruje błędy planu dnia do planu pobytu", () => {
     expect(getRuleGuidance(message("REQ-COVERAGE-001")).actionTo).toBe(
       "/plany#plany-tygodniowe",
@@ -45,6 +67,19 @@ describe("pomoc kontekstowa", () => {
     expect(guidance.actionTo).toBe("/konfiguracja#data-poczatku-cyklu");
     expect(guidance.destination).toContain("Początek cyklu");
     expect(guidance.explanation).toContain("Godziny tygodniowe mogą być prawidłowe");
+  });
+
+  it("nie każe zmieniać godzin z powodu ograniczonej kontroli granic planu", () => {
+    const guidance = getRuleGuidance(
+      message(
+        "REQ-CROSS-WEEK-001",
+        "Tryb skończony nie ma pełnego kontekstu przydziałów przed i po horyzoncie; walidacja odpoczynku na tej granicy jest ograniczona.",
+      ),
+    );
+
+    expect(guidance.title).toContain("nie dotyczy godzin");
+    expect(guidance.explanation).toContain("nie wymaga zmiany godzin");
+    expect(guidance.actionTo).toBe("/podsumowanie");
   });
 
   it("prowadzi błąd pozycji weekendowej do dokładnej karty", () => {
@@ -69,6 +104,42 @@ describe("pomoc kontekstowa", () => {
 
     expect(guidance.actionTo).toBe("/weekendy#dzien-specjalny-weekend");
     expect(guidance.explanation).toContain("Bilans godzin nie jest tu problemem");
+  });
+
+  it("prowadzi konflikt nocki do dokładnej pozycji weekendowej", () => {
+    const nightMessage = message(
+      "REQ-CROSS-GROUP-REST-001",
+      "Nocka Jan Kowalski koliduje z pracą w pozycji weekendu 2.",
+    );
+    nightMessage.educatorId = "B";
+    nightMessage.context = {
+      conflictType: "NIGHT_WEEKEND_REST",
+      position: 2,
+      weekNumber: 2,
+    };
+    const configuration = {
+      educators: [{ id: "B", displayName: "Jan Kowalski" }],
+      weekendVariants: [],
+    } as never;
+
+    const guidance = getRuleGuidance(nightMessage, configuration);
+
+    expect(guidance.title).toContain("Jan Kowalski");
+    expect(guidance.explanation).toContain("pozycji weekendu 2");
+    expect(guidance.actionTo).toBe("/weekendy#weekend-pozycja-2");
+  });
+
+  it("prowadzi konflikt niedostępności do dokładnej pozycji weekendowej", () => {
+    const unavailableMessage = message("REQ-UNAVAILABLE-HARD-001");
+    unavailableMessage.context = {
+      conflictType: "HARD_UNAVAILABILITY_WEEKEND",
+      position: 5,
+    };
+
+    const guidance = getRuleGuidance(unavailableMessage);
+
+    expect(guidance.actionTo).toBe("/weekendy#weekend-pozycja-5");
+    expect(guidance.destination).toBe("Weekendy → pozycja 5");
   });
 
   it("ma instrukcję dla każdego głównego kroku", () => {

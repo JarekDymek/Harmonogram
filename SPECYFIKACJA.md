@@ -100,6 +100,9 @@ Odpoczynek jest rzeczywistą liczbą minut na osi czasu. Wszystkie dane jednego 
 * **slot** – niepodzielna, 30-minutowa jednostka obliczeń;
 * **odcinek pracy** – maksymalny ciąg sąsiadujących slotów przypisanych jednemu wychowawcy w jednej dacie;
 * **dzień pracy** – data, w której wychowawca ma co najmniej jeden odcinek;
+  dyżur nocny przechodzący przez północ jest wyjątkiem i do liczby dni pracy
+  należy wyłącznie do daty rozpoczęcia, choć jego cały przedział pozostaje
+  zajęty na potrzeby kolizji i odpoczynku;
 * **plan dnia** – kompletny opis godzin funkcjonowania i wszystkich przedziałów bez wymaganej opieki dla grupy;
 * **zapotrzebowanie** – przedziały wymaganej opieki obliczone z planu dnia;
 * **przydział godzin** – wymagana liczba minut danego wychowawcy w konkretnym tygodniu, a nie odcinek pracy;

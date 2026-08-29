@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { EmptyState, PageHeader, StatusBadge, formatMinutes } from "../components/UI";
 import { useAppState } from "../state/AppState";
 import { formatPolishHours, parsePolishHours } from "../time";
@@ -13,7 +14,15 @@ import {
 import type { RecurringNightDuty, Unavailability } from "../types";
 
 export function EducatorsPage() {
-  const { configuration, generation, setConfiguration } = useAppState();
+  const location = useLocation();
+  const {
+    configuration,
+    inputReport,
+    busy,
+    setConfiguration,
+    setActiveGroup,
+    validateInput,
+  } = useAppState();
   const [selectedEducatorId, setSelectedEducatorId] = useState("");
   const [recurringNight, setRecurringNight] = useState({
     educatorId: "",
@@ -40,6 +49,23 @@ export function EducatorsPage() {
     [configuration],
   );
 
+  const requestedGroupId = useMemo(
+    () => new URLSearchParams(location.search).get("grupa"),
+    [location.search],
+  );
+
+  useEffect(() => {
+    if (
+      requestedGroupId &&
+      configuration?.activeGroupId !== requestedGroupId &&
+      configuration?.groups.some(
+        (item) => item.id === requestedGroupId && item.active,
+      )
+    ) {
+      setActiveGroup(requestedGroupId);
+    }
+  }, [configuration, requestedGroupId, setActiveGroup]);
+
   if (!configuration || !activeGroup) return <EmptyState>Najpierw utwórz konfigurację.</EmptyState>;
   const educatorById = new Map(configuration.educators.map((item) => [item.id, item]));
   const memberIds = new Set(memberships.map((item) => item.educatorId));
@@ -54,6 +80,32 @@ export function EducatorsPage() {
           membership.weeklyTargetHoursByWeek.at(-1) ??
           0) <= 0,
     ).some(Boolean),
+  );
+  const activeGroupBalances = inputReport?.weeklyBalance.filter(
+    (item) =>
+      item.groupId === activeGroup.id ||
+      (!item.groupId && configuration.selectedGroupIds.length === 1),
+  ) ?? [];
+  const balanceByWeek = new Map(
+    activeGroupBalances.map((item) => [item.weekNumber, item]),
+  );
+  const mismatchedWeeks = new Set(
+    activeGroupBalances
+      .filter((item) => item.differenceMinutes !== 0)
+      .map((item) => item.weekNumber),
+  );
+  const enteredMinutesByWeek = Array.from(
+    { length: configuration.planningHorizonWeeks },
+    (_, weekIndex) =>
+      memberships.reduce(
+        (sum, membership) =>
+          sum +
+          (membership.weeklyTargetHoursByWeek[weekIndex] ??
+            membership.weeklyTargetHoursByWeek.at(-1) ??
+            0) *
+            60,
+        0,
+      ),
   );
 
   const updateEducator = (educatorId: string, field: "displayName" | "shortCode" | "description", value: string) => {
@@ -236,16 +288,6 @@ export function EducatorsPage() {
     setConfiguration({ ...configuration, unavailability: [...configuration.unavailability, item] });
   };
 
-  const globalTotals = configuration.educators.map((educator) => {
-    const target = configuration.groupMemberships
-      .filter((item) => item.active && item.educatorId === educator.id)
-      .reduce((sum, item) => sum + (item.weeklyTargetHoursByWeek[0] ?? 0) * 60, 0);
-    const actual = generation?.assignments
-      .filter((item) => item.educatorId === educator.id)
-      .reduce((sum, item) => sum + item.endMinute - item.startMinute, 0) ?? 0;
-    return { educator, target, actual };
-  });
-
   return (
     <>
       <PageHeader
@@ -256,23 +298,78 @@ export function EducatorsPage() {
       />
 
       <section className="section-block" id="godziny">
-        <div className="section-heading"><div><span className="eyebrow">AKTYWNA GRUPA</span><h2>{memberships.length} członkostwa</h2></div><StatusBadge value={memberships.length >= 3 && memberships.length <= 4 ? "KOMPLET" : "UZUPEŁNIJ"} /></div>
+        <div className="section-heading">
+          <div><span className="eyebrow">AKTYWNA GRUPA</span><h2>Godziny opieki · {memberships.length} osoby</h2></div>
+          <div className="section-heading__actions">
+            <StatusBadge value={memberships.length >= 3 && memberships.length <= 4 ? "KOMPLET" : "UZUPEŁNIJ"} />
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={busy}
+              onClick={() => void validateInput()}
+            >
+              {busy ? "Sprawdzanie…" : "Sprawdź sumy godzin"}
+            </button>
+          </div>
+        </div>
         <div
-          className={`inline-guidance ${incompleteHourMemberships.length ? "inline-guidance--warning" : "inline-guidance--ok"}`}
+          className={`inline-guidance ${incompleteHourMemberships.length || mismatchedWeeks.size ? "inline-guidance--error" : "inline-guidance--ok"}`}
           role="status"
         >
-          <span aria-hidden="true">{incompleteHourMemberships.length ? "!" : "✓"}</span>
+          <span aria-hidden="true">{incompleteHourMemberships.length || mismatchedWeeks.size ? "!" : "✓"}</span>
           <div>
             <strong>
               {incompleteHourMemberships.length
                 ? `Uzupełnij godziny dla ${incompleteHourMemberships.length} osób`
-                : "Wymiar godzin jest uzupełniony"}
+                : mismatchedWeeks.size
+                  ? `Suma nie zgadza się w ${mismatchedWeeks.size} ${mismatchedWeeks.size === 1 ? "tygodniu" : "tygodniach"}`
+                  : inputReport
+                    ? "Suma godzin zgadza się z planem opieki"
+                    : "Godziny są wpisane — sprawdź ich sumę"}
             </strong>
             <p>
-              W każdym tygodniu wpisz liczbę większą niż 0, np. 30 albo 30,5.
-              Wartość zapisze się automatycznie po opuszczeniu pola.
+              To są godziny do rozdzielenia w planie tej grupy. Nocki ustawiasz
+              osobno niżej. Wartość zapisuje się po opuszczeniu pola.
             </p>
           </div>
+        </div>
+        <div className="week-balance-grid" aria-label="Suma godzin według tygodni">
+          {Array.from({ length: configuration.planningHorizonWeeks }, (_, weekIndex) => {
+            const weekNumber = weekIndex + 1;
+            const balance = balanceByWeek.get(weekNumber);
+            const difference = balance?.differenceMinutes ?? null;
+            const isMismatch = difference !== null && difference !== 0;
+            const direction = difference !== null && difference < 0 ? "brakuje" : "za dużo";
+            return (
+              <article
+                className={`week-balance ${isMismatch ? "week-balance--error" : balance ? "week-balance--ok" : ""}`}
+                id={`godziny-tydzien-${weekNumber}`}
+                key={weekNumber}
+              >
+                <div>
+                  <span>Tydzień {weekNumber}</span>
+                  <strong>
+                    {isMismatch
+                      ? `${direction} ${formatMinutes(Math.abs(difference))}`
+                      : balance
+                        ? "Suma się zgadza"
+                        : `Wpisano ${formatMinutes(enteredMinutesByWeek[weekIndex])}`}
+                  </strong>
+                </div>
+                {balance ? (
+                  <p>
+                    Plan wymaga <strong>{formatMinutes(balance.requiredMinutes)}</strong>,
+                    wpisano <strong>{formatMinutes(balance.assignedMinutes)}</strong>
+                    {isMismatch && (
+                      <> — {difference < 0 ? "zwiększ" : "zmniejsz"} sumę pól tego tygodnia o <strong>{formatMinutes(Math.abs(difference))}</strong></>
+                    )}
+                  </p>
+                ) : (
+                  <p>Wybierz „Sprawdź sumy godzin”, aby porównać je z planem opieki.</p>
+                )}
+              </article>
+            );
+          })}
         </div>
         <div className="educator-grid">
           {memberships.map((membership, index) => {
@@ -289,23 +386,24 @@ export function EducatorsPage() {
                 <label>Skrót<input value={educator.shortCode} onChange={(event) => updateEducator(educator.id, "shortCode", event.target.value)} /></label>
                 {Array.from({ length: configuration.planningHorizonWeeks }, (_, weekIndex) => (
                   <label
-                    className={
+                    className={`${
                       (membership.weeklyTargetHoursByWeek[weekIndex] ??
                         membership.weeklyTargetHoursByWeek.at(-1) ??
                         0) <= 0
                         ? "field-warning"
                         : ""
-                    }
+                    } ${mismatchedWeeks.has(weekIndex + 1) ? "field-balance-error" : ""}`.trim()}
                     key={weekIndex}
                   >
-                    Godziny tygodniowo{configuration.planningHorizonWeeks > 1 ? ` · tydzień ${weekIndex + 1}` : ""}
+                    Godziny opieki{configuration.planningHorizonWeeks > 1 ? ` · tydzień ${weekIndex + 1}` : ""}
                     <input
                       inputMode="decimal"
                       aria-invalid={
                         (membership.weeklyTargetHoursByWeek[weekIndex] ??
                           membership.weeklyTargetHoursByWeek.at(-1) ??
-                          0) <= 0
+                          0) <= 0 || mismatchedWeeks.has(weekIndex + 1)
                       }
+                      aria-describedby={mismatchedWeeks.has(weekIndex + 1) ? `godziny-tydzien-${weekIndex + 1}` : undefined}
                       defaultValue={formatPolishHours(membership.weeklyTargetHoursByWeek[weekIndex] ?? membership.weeklyTargetHoursByWeek.at(-1) ?? 0)}
                       onBlur={(event) => updateHours(membership.id, weekIndex, event.target.value)}
                     />
@@ -324,8 +422,11 @@ export function EducatorsPage() {
                     Skopiuj tydzień 1 do pozostałych
                   </button>
                 )}
-                <label>Opis<textarea value={educator.description} onChange={(event) => updateEducator(educator.id, "description", event.target.value)} /></label>
-                {memberships.length === 4 && <button className="button button--ghost" type="button" onClick={() => removeMembership(membership.id)}>Usuń członkostwo</button>}
+                <details className="person-card__more">
+                  <summary>Więcej ustawień osoby</summary>
+                  <label>Opis<textarea value={educator.description} onChange={(event) => updateEducator(educator.id, "description", event.target.value)} /></label>
+                  {memberships.length === 4 && <button className="button button--ghost" type="button" onClick={() => removeMembership(membership.id)}>Usuń z tej grupy</button>}
+                </details>
               </article>
             );
           })}
@@ -338,26 +439,17 @@ export function EducatorsPage() {
         )}
       </section>
 
-      <section className="section-block">
-        <div className="section-heading"><div><span className="eyebrow">WSZYSTKIE GRUPY</span><h2>Globalne podsumowanie godzin</h2></div></div>
-        <div className="metric-grid metric-grid--three">
-          {globalTotals.map(({ educator, target, actual }) => (
-            <div className="metric" key={educator.id}><small>{educator.displayName}</small><strong>{formatMinutes(target)}</strong><span>cel grup · wynik {formatMinutes(actual)}</span></div>
-          ))}
-        </div>
-      </section>
-
-      <section className="section-block">
-        <div className="section-heading"><div><span className="eyebrow">OGRANICZENIA GLOBALNE</span><h2>Niedostępności</h2></div></div>
+      <section className="section-block" id="dostepnosc">
+        <div className="section-heading"><div><span className="eyebrow">KIEDY NIE MOŻE PRACOWAĆ</span><h2>Niedostępność wychowawcy</h2></div></div>
         <div className="inline-form">
           <label>Wychowawca<select value={unavailable.educatorId} onChange={(event) => setUnavailable({ ...unavailable, educatorId: event.target.value })}><option value="">Wybierz</option>{configuration.educators.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
-          <label>Rodzaj<select value={unavailable.type} onChange={(event) => setUnavailable({ ...unavailable, type: event.target.value as "HARD" | "PREFERRED" })}><option value="HARD">HARD</option><option value="PREFERRED">PREFERRED</option></select></label>
+          <label>Rodzaj<select value={unavailable.type} onChange={(event) => setUnavailable({ ...unavailable, type: event.target.value as "HARD" | "PREFERRED" })}><option value="HARD">Nie może pracować</option><option value="PREFERRED">Woli nie pracować</option></select></label>
           <label>Dzień<select value={unavailable.dayOfWeek} onChange={(event) => setUnavailable({ ...unavailable, dayOfWeek: Number(event.target.value) })}>{["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Niedz"].map((name, index) => <option key={name} value={index}>{name}</option>)}</select></label>
           <label>Od<input type="time" step="1800" value={unavailable.startTime} onChange={(event) => setUnavailable({ ...unavailable, startTime: event.target.value })} /></label>
           <label>Do<input type="time" step="1800" value={unavailable.endTime} onChange={(event) => setUnavailable({ ...unavailable, endTime: event.target.value })} /></label>
           <button className="button button--secondary" type="button" onClick={addUnavailability}>Dodaj</button>
         </div>
-        <div className="record-list">{configuration.unavailability.map((item) => <div className="record-row" key={item.id}><span>{educatorById.get(item.educatorId)?.shortCode}</span><strong>{item.type} · {item.startTime}–{item.endTime}</strong><button className="icon-button" type="button" onClick={() => setConfiguration({ ...configuration, unavailability: configuration.unavailability.filter((value) => value.id !== item.id) })}>×</button></div>)}</div>
+        <div className="record-list">{configuration.unavailability.map((item) => <div className="record-row" key={item.id}><span>{educatorById.get(item.educatorId)?.shortCode}</span><strong>{item.type === "HARD" ? "Nie może pracować" : "Woli nie pracować"} · {item.startTime}–{item.endTime}</strong><button className="icon-button" type="button" onClick={() => setConfiguration({ ...configuration, unavailability: configuration.unavailability.filter((value) => value.id !== item.id) })}>×</button></div>)}</div>
       </section>
 
       <section className="section-block" id="nocki">

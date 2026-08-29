@@ -30,8 +30,19 @@ export function SummaryPage() {
   const firstGuidance = errors[0]
     ? getRuleGuidance(errors[0], configuration)
     : null;
+  const remainingMessages = inputReport?.messages.filter(
+    (item) =>
+      item !== errors[0] &&
+      !(
+        item.ruleId === "REQ-HOURS-001" &&
+        typeof item.context.weekNumber === "number" &&
+        typeof item.context.differenceMinutes === "number"
+      ),
+  ) ?? [];
 
   const runGeneration = async () => {
+    const validation = await validateInput();
+    if (!validation || validation.status !== "VALID_INPUT") return;
     const result = await generate();
     if (!result) return;
     navigate(
@@ -46,26 +57,16 @@ export function SummaryPage() {
       <PageHeader
         eyebrow="KROK 07 · KONTROLA WEJŚCIA"
         title="Podsumowanie przed generowaniem"
-        description="Najpierw kliknij „Sprawdź dane”. Jeśli coś wymaga poprawy, aplikacja pokaże prostą instrukcję i właściwy formularz."
+        description="Kliknij jeden przycisk. Aplikacja najpierw sprawdzi dane, a jeśli są poprawne — od razu wygeneruje harmonogram."
         actions={
-          <>
-            <button
-              className="button button--secondary"
-              type="button"
-              disabled={busy}
-              onClick={() => void validateInput()}
-            >
-              1. Sprawdź dane
-            </button>
-            <button
-              className="button button--primary"
-              type="button"
-              disabled={busy || inputReport?.status !== "VALID_INPUT"}
-              onClick={() => void runGeneration()}
-            >
-              {busy ? "Przetwarzanie…" : "2. Generuj harmonogram"}
-            </button>
-          </>
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={busy}
+            onClick={() => void runGeneration()}
+          >
+            {busy ? "Sprawdzanie i generowanie…" : "Sprawdź i wygeneruj harmonogram"}
+          </button>
         }
       />
       {configuration.requestedOperationMode === "DEMONSTRATION" && <DemoNotice />}
@@ -74,7 +75,8 @@ export function SummaryPage() {
           <span aria-hidden="true">↻</span>
           <h2>Dane nie zostały jeszcze sprawdzone</h2>
           <p>
-            Uruchom walidację, aby zobaczyć bilanse i zapotrzebowanie dla
+            Wybierz „Sprawdź i wygeneruj harmonogram”. Jeśli coś jest nie tak,
+            zobaczysz dokładną osobę, tydzień i miejsce poprawy dla
             {` ${expectedDates} dat`}.
           </p>
         </section>
@@ -107,7 +109,7 @@ export function SummaryPage() {
             </div>
           </section>
           {firstGuidance && (
-            <section className="next-step-card" aria-labelledby="next-step-title">
+            <section className="next-step-card next-step-card--error" aria-labelledby="next-step-title">
               <div>
                 <span className="eyebrow">CO ZROBIĆ TERAZ</span>
                 <h2 id="next-step-title">{firstGuidance.title}</h2>
@@ -134,67 +136,94 @@ export function SummaryPage() {
               </div>
             </div>
             <div className="balance-grid">
-              {inputReport.weeklyBalance.map((item) => (
-                <article
-                  className={`balance-card ${item.differenceMinutes === 0 ? "balance-card--ok" : "balance-card--error"}`}
-                  key={`${item.groupId ?? "G"}-${item.weekNumber}`}
-                >
-                  <header>
-                    <span>{item.groupId ? `${configuration.groups.find((group) => group.id === item.groupId)?.code} · ` : ""}Tydzień {item.weekNumber}</span>
-                    <strong>
-                      {item.differenceMinutes > 0 ? "+" : ""}
-                      {formatMinutes(item.differenceMinutes)}
-                    </strong>
-                  </header>
-                  <dl>
-                    <div>
-                      <dt>Zapotrzebowanie</dt>
-                      <dd>{formatMinutes(item.requiredMinutes)}</dd>
-                    </div>
-                    <div>
-                      <dt>Przydziały</dt>
-                      <dd>{formatMinutes(item.assignedMinutes)}</dd>
-                    </div>
-                  </dl>
-                  <small>
-                    {item.startDate} – {item.endDate}
-                  </small>
-                </article>
-              ))}
+              {inputReport.weeklyBalance.map((item) => {
+                const mismatch = item.differenceMinutes !== 0;
+                const missing = item.differenceMinutes < 0;
+                const group = item.groupId
+                  ? configuration.groups.find((candidate) => candidate.id === item.groupId)
+                  : undefined;
+                const groupQuery = item.groupId
+                  ? `?grupa=${encodeURIComponent(item.groupId)}`
+                  : "";
+                return (
+                  <article
+                    className={`balance-card ${mismatch ? "balance-card--error" : "balance-card--ok"}`}
+                    key={`${item.groupId ?? "G"}-${item.weekNumber}`}
+                  >
+                    <header>
+                      <span>{group ? `${group.code} · ` : ""}Tydzień {item.weekNumber}</span>
+                      <strong>
+                        {mismatch
+                          ? `${missing ? "Brakuje" : "Za dużo o"} ${formatMinutes(Math.abs(item.differenceMinutes))}`
+                          : "Zgadza się"}
+                      </strong>
+                    </header>
+                    <dl>
+                      <div>
+                        <dt>Plan opieki wymaga</dt>
+                        <dd>{formatMinutes(item.requiredMinutes)}</dd>
+                      </div>
+                      <div>
+                        <dt>Wpisano wychowawcom</dt>
+                        <dd>{formatMinutes(item.assignedMinutes)}</dd>
+                      </div>
+                    </dl>
+                    {mismatch && (
+                      <p className="balance-card__instruction">
+                        {missing ? "Zwiększ" : "Zmniejsz"} sumę godzin tego tygodnia o <strong>{formatMinutes(Math.abs(item.differenceMinutes))}</strong>
+                      </p>
+                    )}
+                    <small>{item.startDate} – {item.endDate}</small>
+                    {mismatch && (
+                      <Link
+                        className="button button--secondary balance-card__action"
+                        to={`/wychowawcy${groupQuery}#godziny-tydzien-${item.weekNumber}`}
+                      >
+                        Popraw tydzień {item.weekNumber}
+                      </Link>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           </section>
-          <section className="section-block">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">ZAPOTRZEBOWANIE</span>
-                <h2>{expectedDates} dat</h2>
+          <details className="section-block summary-details">
+            <summary>
+              <span>
+                <span className="eyebrow">SZCZEGÓŁY PLANU OPIEKI</span>
+                <strong>Pokaż rozpisanie {expectedDates} dni</strong>
+              </span>
+              <span aria-hidden="true">＋</span>
+            </summary>
+            <div className="summary-details__content">
+              <div className="care-list">
+                {inputReport.care.map((day) => (
+                  <div className="care-row" key={`${day.groupId}-${day.date}`}>
+                    <span>
+                      <strong>{day.date}</strong>
+                      <small>{configuration.groups.find((group) => group.id === day.groupId)?.code} · Tydzień {day.weekNumber}</small>
+                    </span>
+                    <Timeline intervals={day.intervals} />
+                    <strong>{formatMinutes(day.totalRequiredMinutes)}</strong>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="care-list">
-              {inputReport.care.map((day) => (
-                <div className="care-row" key={`${day.groupId}-${day.date}`}>
-                  <span>
-                    <strong>{day.date}</strong>
-                    <small>{configuration.groups.find((group) => group.id === day.groupId)?.code} · Tydzień {day.weekNumber}</small>
-                  </span>
-                  <Timeline intervals={day.intervals} />
-                  <strong>{formatMinutes(day.totalRequiredMinutes)}</strong>
+          </details>
+          {remainingMessages.length > 0 && (
+            <section className="section-block">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">POZOSTAŁE RZECZY DO POPRAWY</span>
+                  <h2>Proste wskazówki</h2>
                 </div>
-              ))}
-            </div>
-          </section>
-          <section className="section-block">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">KOMUNIKATY</span>
-                <h2>Raport wejścia</h2>
               </div>
-            </div>
-            <MessagesTable
-              messages={inputReport.messages}
-              configuration={configuration}
-            />
-          </section>
+              <MessagesTable
+                messages={remainingMessages}
+                configuration={configuration}
+              />
+            </section>
+          )}
         </>
       )}
     </>
