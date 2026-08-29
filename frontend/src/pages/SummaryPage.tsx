@@ -32,6 +32,7 @@ export function SummaryPage() {
     : null;
   const remainingMessages = inputReport?.messages.filter(
     (item) =>
+      item !== errors[0] &&
       !(
         item.ruleId === "REQ-HOURS-001" &&
         typeof item.context.weekNumber === "number" &&
@@ -40,6 +41,8 @@ export function SummaryPage() {
   ) ?? [];
 
   const runGeneration = async () => {
+    const validation = await validateInput();
+    if (!validation || validation.status !== "VALID_INPUT") return;
     const result = await generate();
     if (!result) return;
     navigate(
@@ -54,26 +57,16 @@ export function SummaryPage() {
       <PageHeader
         eyebrow="KROK 07 · KONTROLA WEJŚCIA"
         title="Podsumowanie przed generowaniem"
-        description="Najpierw kliknij „Sprawdź dane”. Jeśli coś wymaga poprawy, aplikacja pokaże prostą instrukcję i właściwy formularz."
+        description="Kliknij jeden przycisk. Aplikacja najpierw sprawdzi dane, a jeśli są poprawne — od razu wygeneruje harmonogram."
         actions={
-          <>
-            <button
-              className="button button--secondary"
-              type="button"
-              disabled={busy}
-              onClick={() => void validateInput()}
-            >
-              1. Sprawdź dane
-            </button>
-            <button
-              className="button button--primary"
-              type="button"
-              disabled={busy || inputReport?.status !== "VALID_INPUT"}
-              onClick={() => void runGeneration()}
-            >
-              {busy ? "Przetwarzanie…" : "2. Generuj harmonogram"}
-            </button>
-          </>
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={busy}
+            onClick={() => void runGeneration()}
+          >
+            {busy ? "Sprawdzanie i generowanie…" : "Sprawdź i wygeneruj harmonogram"}
+          </button>
         }
       />
       {configuration.requestedOperationMode === "DEMONSTRATION" && <DemoNotice />}
@@ -82,7 +75,8 @@ export function SummaryPage() {
           <span aria-hidden="true">↻</span>
           <h2>Dane nie zostały jeszcze sprawdzone</h2>
           <p>
-            Uruchom walidację, aby zobaczyć bilanse i zapotrzebowanie dla
+            Wybierz „Sprawdź i wygeneruj harmonogram”. Jeśli coś jest nie tak,
+            zobaczysz dokładną osobę, tydzień i miejsce poprawy dla
             {` ${expectedDates} dat`}.
           </p>
         </section>

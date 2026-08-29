@@ -32,6 +32,7 @@ from app.services.time_utils import (
     normalize_pairs,
     parse_hhmm,
     subtract_pairs,
+    zone,
 )
 from app.services.weekend import selected_weekend_variant, template_tuples
 
@@ -1054,12 +1055,13 @@ def _external_as_assignments(
     configuration: ScheduleConfiguration,
 ) -> list[WorkAssignment]:
     result = list(configuration.locked_assignments)
-    zone = configuration.time_zone_id
+    time_zone_id = configuration.time_zone_id
+    project_zone = zone(time_zone_id)
     for duty in configuration.external_duty_assignments:
         if not duty.locked:
             continue
-        start = duty.start_date_time
-        end = duty.end_date_time
+        start = duty.start_date_time.astimezone(project_zone)
+        end = duty.end_date_time.astimezone(project_zone)
         current_date = start.date()
         while current_date <= end.date():
             start_minute = (
@@ -1074,8 +1076,8 @@ def _external_as_assignments(
             )
             if end_minute > start_minute:
                 # Konwersja granic jest wykonywana ponownie, niezależnie od solvera.
-                aware_local_datetime(current_date, start_minute, zone)
-                aware_local_datetime(current_date, end_minute, zone)
+                aware_local_datetime(current_date, start_minute, time_zone_id)
+                aware_local_datetime(current_date, end_minute, time_zone_id)
                 result.append(
                     WorkAssignment(
                         group_id="EXTERNAL",
@@ -1194,6 +1196,16 @@ def _cross_group_messages(
         )
 
     required_days = configuration.organizational_rules.required_work_days_per_week
+    external_start_dates = {
+        (
+            duty.educator_id,
+            duty.start_date_time.astimezone(
+                zone(configuration.time_zone_id)
+            ).date(),
+        )
+        for duty in configuration.external_duty_assignments
+        if duty.locked
+    }
     relevant_ids = {
         item.educator_id
         for item in configuration.group_memberships
@@ -1208,8 +1220,15 @@ def _cross_group_messages(
             days = {
                 item.date
                 for item in all_assignments
-                if item.educator_id == educator_id and start <= item.date < end
+                if item.group_id != "EXTERNAL"
+                and item.educator_id == educator_id
+                and start <= item.date < end
             }
+            days.update(
+                duty_date
+                for duty_educator_id, duty_date in external_start_dates
+                if duty_educator_id == educator_id and start <= duty_date < end
+            )
             if len(days) != required_days:
                 messages.append(
                     error(

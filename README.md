@@ -59,6 +59,12 @@ pola oznacza API dostępne pod tym samym adresem.
 - prywatny eksport/import pełnej konfiguracji między komputerem i telefonem;
 - stałe nocki wybierane jako osoba i dzień tygodnia, automatycznie rozwijane
   do dyżurów 22:00–06:00 w każdym tygodniu planu;
+- nocka przechodząca przez północ zajmuje rzeczywiste godziny po obu stronach
+  północy, ale do limitu dni pracy jest przypisana wyłącznie do dnia jej
+  rozpoczęcia;
+- jeden przycisk na podsumowaniu sprawdza dane i, gdy nie ma błędów, od razu
+  uruchamia generator;
+- blokujące konflikty wskazują osobę, datę, godziny i dokładne miejsce poprawy;
 - interfejs godzinowy z obsługą polskiego przecinka i krokiem 0,5 godziny.
 - twardy zakaz powrotu `A–B–A` w jednym ciągłym bloku opieki;
 - równoważna optymalizacja leksykograficzna: dni dzielone, przekazania,
@@ -164,8 +170,8 @@ backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --por
 
 1. Otwórz stronę startową.
 2. Wybierz **Otwórz demonstrację**.
-3. Przejdź do **Podsumowania** i wybierz **Sprawdź dane**.
-4. Po uzyskaniu `VALID_INPUT` wybierz **Generuj harmonogram**.
+3. Przejdź do **Podsumowania** i wybierz **Sprawdź i wygeneruj harmonogram**.
+4. Jeśli dane są poprawne, aplikacja sama uruchomi generator.
 5. Otwórz **Raport walidacji**.
 
 Demonstracja zawiera:
@@ -288,6 +294,9 @@ Historyczne raporty spójności nie zostały zmodyfikowane przez implementację.
   `NAJLEPSZA ZNALEZIONA`, nie jako optimum udowodnione;
 - stałe dyżury nocne są blokowane automatycznie w każdym tygodniu; dodatkowe
   nocki i nadgodziny nadal wymagają wskazania konkretnej daty;
+- dzień wskazany przy stałej nocce jest dniem jej rozpoczęcia; standardowy
+  dyżur trwa od 22:00 do 06:00 następnego dnia i liczy się jako jeden dzień
+  pracy, natomiast kolizje i odpoczynki uwzględniają cały rzeczywisty przedział;
 - dyżur stołówkowy jest obecnie informacyjnym przydziałem grupy bez godzin
   konkretnej osoby;
 - prawdziwe użycie wymaga zastąpienia danych demonstracyjnych zatwierdzonymi

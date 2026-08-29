@@ -311,6 +311,73 @@ def test_solver_respects_cross_midnight_night_duty():
     )
 
 
+def test_cross_midnight_night_counts_as_one_workday_and_keeps_local_time():
+    configuration = demo_configuration()
+    configuration.solver_time_limit_seconds = 10
+    configuration.educators.append(
+        Educator(
+            id="D",
+            display_name="Wychowawca D",
+            short_code="D",
+            base_weekly_assigned_minutes=1320,
+        )
+    )
+    targets = {"A": 22, "B": 22, "C": 16, "D": 22}
+    configuration.group_memberships = [
+        GroupEducatorMembership(
+            id=f"MEM-G1-{educator_id}",
+            group_id="G1",
+            educator_id=educator_id,
+            role=(
+                GroupEducatorRole.SUPPORT
+                if educator_id == "D"
+                else GroupEducatorRole.PRIMARY
+            ),
+            weekly_target_hours_by_week=[hours],
+        )
+        for educator_id, hours in targets.items()
+    ]
+    configuration.educator_count = 4
+
+    first_weekend = next(
+        item
+        for item in configuration.weekend_variants
+        if item.position_in_cycle == 1
+    )
+    first_weekend.off_educator_id = "B"
+    for template in (
+        first_weekend.saturday_template,
+        first_weekend.sunday_template,
+    ):
+        for assignment in template.assignments:
+            if assignment.educator_id == "B":
+                assignment.educator_id = "D"
+
+    project_zone = ZoneInfo(configuration.time_zone_id)
+    utc = ZoneInfo("UTC")
+    saturday = configuration.cycle_start_date + timedelta(days=5)
+    start = datetime.combine(
+        saturday,
+        datetime.min.time(),
+        tzinfo=project_zone,
+    ) + timedelta(hours=22)
+    configuration.external_duty_assignments.append(
+        ExternalDutyAssignment(
+            id="NIGHT-B-SATURDAY",
+            educator_id="B",
+            start_date_time=start.astimezone(utc),
+            end_date_time=(start + timedelta(hours=8)).astimezone(utc),
+            duty_type="NIGHT",
+        )
+    )
+
+    response = generate_schedule(configuration)
+
+    assert response.generation_status == "CANDIDATE_FOUND"
+    assert response.validation_report is not None
+    assert response.validation_report.status == "VALID"
+
+
 def test_legacy_single_group_payload_is_migrated_without_data_loss():
     source = demo_configuration()
     payload = source.model_dump(mode="json", by_alias=True)

@@ -78,11 +78,11 @@ const pageHelp: Record<string, PageHelp> = {
   },
   "/podsumowanie": {
     title: "Sprawdzenie i generowanie",
-    intro: "Najpierw kliknij „Sprawdź dane”. Generator uruchomi się dopiero po usunięciu błędów.",
+    intro: "Jeden przycisk sprawdza dane i od razu uruchamia generator, gdy wszystko się zgadza.",
     steps: [
-      "Przeczytaj pierwszą czerwoną kartę.",
-      "Kliknij „Napraw teraz”, aby przejść do właściwego formularza.",
-      "Wróć tutaj, ponownie sprawdź dane i dopiero potem wygeneruj harmonogram.",
+      "Kliknij „Sprawdź i wygeneruj harmonogram”.",
+      "Jeśli pojawi się czerwona karta, przeczytaj nazwisko, tydzień i konkretną przyczynę.",
+      "Kliknij przycisk naprawy, popraw wskazane miejsce i spróbuj ponownie.",
     ],
     note: "Ostrzeżenia wymagają uwagi, ale tylko błędy blokują generowanie.",
   },
@@ -320,6 +320,62 @@ export function getRuleGuidance(
       destination: "Wychowawcy → tygodniowy wymiar wskazanej osoby",
       actionLabel: "Uzupełnij godziny",
       actionTo: `/wychowawcy${educatorAnchor}`,
+    };
+  }
+
+  if (contextString(message, "conflictType") === "NIGHT_WEEKEND_REST") {
+    const target = weekendTarget(message, configuration);
+    const educator = message.educatorId
+      ? configuration?.educators.find((item) => item.id === message.educatorId)
+      : undefined;
+    const person = educator?.displayName ?? "wskazany wychowawca";
+    return {
+      title: `Nocka ${person} koliduje z pracą w weekend`,
+      explanation: message.message,
+      destination: target.destination,
+      actionLabel: "Zmień dzienny dyżur weekendowy",
+      actionTo: target.actionTo,
+    };
+  }
+
+  if (
+    contextString(message, "conflictType") ===
+    "HARD_UNAVAILABILITY_WEEKEND"
+  ) {
+    const target = weekendTarget(message, configuration);
+    return {
+      title: "Niedostępność koliduje z konkretnym weekendem",
+      explanation: message.message,
+      destination: target.destination,
+      actionLabel: "Zmień obsadę tego weekendu",
+      actionTo: target.actionTo,
+    };
+  }
+
+  if (
+    ["FIXED_DUTY_TRIGGER", "FIXED_DUTIES_TRIGGER"].includes(
+      contextString(message, "conflictType") ?? "",
+    )
+  ) {
+    return {
+      title: "Wskazana nocka blokuje ułożenie planu",
+      explanation: message.message,
+      destination: "Wychowawcy → nocki",
+      actionLabel: "Sprawdź wskazaną nockę",
+      actionTo: "/wychowawcy#nocki",
+    };
+  }
+
+  if (
+    contextString(message, "conflictType") ===
+    "HARD_UNAVAILABILITY_TRIGGER"
+  ) {
+    return {
+      title: "Wskazana niedostępność blokuje plan",
+      explanation: message.message,
+      destination: "Wychowawcy → dostępność wskazanej osoby",
+      actionLabel: "Sprawdź tę niedostępność",
+      actionTo: "/wychowawcy#dostepnosc",
     };
   }
 

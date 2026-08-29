@@ -268,6 +268,107 @@ describe("główny przepływ interfejsu", () => {
     expect(view.container.querySelector('input[type="datetime-local"]')).toBeNull();
   });
 
+  it("jednym przyciskiem sprawdza dane i nie uruchamia generatora po konkretnym błędzie", async () => {
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v3",
+      JSON.stringify(configurationFixture),
+    );
+    const request = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: "INVALID_INPUT",
+        publicResult: "DANE_NIEPOPRAWNE",
+        care: [],
+        weeklyBalance: [],
+        messages: [
+          {
+            ruleId: "REQ-CROSS-GROUP-REST-001",
+            severity: "ERROR",
+            message:
+              "Stała nocka Wychowawca B koliduje z pracą w pozycji weekendu 1.",
+            educatorId: "B",
+            context: {
+              conflictType: "NIGHT_WEEKEND_REST",
+              position: 1,
+              weekNumber: 1,
+            },
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", request);
+    const user = userEvent.setup();
+    renderApp("/podsumowanie");
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Sprawdź i wygeneruj harmonogram",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /Nocka Wychowawca B koliduje z pracą w weekend/i,
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getAllByRole("link", { name: "Zmień dzienny dyżur weekendowy" })[0],
+    ).toHaveAttribute("href", "/weekendy#weekend-pozycja-1");
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0][0]).toBe("/api/validate-input");
+  });
+
+  it("jednym przyciskiem po poprawnej kontroli uruchamia generator", async () => {
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v3",
+      JSON.stringify(configurationFixture),
+    );
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: "VALID_INPUT",
+          care: [],
+          weeklyBalance: [],
+          messages: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          generationStatus: "CANDIDATE_FOUND",
+          publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY",
+          assignments: [
+            {
+              groupId: "G1",
+              educatorId: "A",
+              date: "2026-09-14",
+              startMinute: 360,
+              endMinute: 480,
+            },
+          ],
+          care: [],
+          messages: [],
+        }),
+      });
+    vi.stubGlobal("fetch", request);
+    const user = userEvent.setup();
+    renderApp("/podsumowanie");
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Sprawdź i wygeneruj harmonogram",
+      }),
+    );
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(request.mock.calls.map((item) => item[0])).toEqual([
+      "/api/validate-input",
+      "/api/generate",
+    ]);
+  });
+
   it("udostępnia import pakietu także na telefonie bez konfiguracji", () => {
     renderApp("/urzadzenia");
     expect(

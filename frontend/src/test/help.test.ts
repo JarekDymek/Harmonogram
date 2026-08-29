@@ -106,6 +106,42 @@ describe("pomoc kontekstowa", () => {
     expect(guidance.explanation).toContain("Bilans godzin nie jest tu problemem");
   });
 
+  it("prowadzi konflikt nocki do dokładnej pozycji weekendowej", () => {
+    const nightMessage = message(
+      "REQ-CROSS-GROUP-REST-001",
+      "Nocka Jan Kowalski koliduje z pracą w pozycji weekendu 2.",
+    );
+    nightMessage.educatorId = "B";
+    nightMessage.context = {
+      conflictType: "NIGHT_WEEKEND_REST",
+      position: 2,
+      weekNumber: 2,
+    };
+    const configuration = {
+      educators: [{ id: "B", displayName: "Jan Kowalski" }],
+      weekendVariants: [],
+    } as never;
+
+    const guidance = getRuleGuidance(nightMessage, configuration);
+
+    expect(guidance.title).toContain("Jan Kowalski");
+    expect(guidance.explanation).toContain("pozycji weekendu 2");
+    expect(guidance.actionTo).toBe("/weekendy#weekend-pozycja-2");
+  });
+
+  it("prowadzi konflikt niedostępności do dokładnej pozycji weekendowej", () => {
+    const unavailableMessage = message("REQ-UNAVAILABLE-HARD-001");
+    unavailableMessage.context = {
+      conflictType: "HARD_UNAVAILABILITY_WEEKEND",
+      position: 5,
+    };
+
+    const guidance = getRuleGuidance(unavailableMessage);
+
+    expect(guidance.actionTo).toBe("/weekendy#weekend-pozycja-5");
+    expect(guidance.destination).toBe("Weekendy → pozycja 5");
+  });
+
   it("ma instrukcję dla każdego głównego kroku", () => {
     for (const path of [
       "/",

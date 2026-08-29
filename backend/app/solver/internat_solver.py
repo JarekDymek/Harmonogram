@@ -24,6 +24,7 @@ from app.services.time_utils import (
     interval_slots,
     normalize_pairs,
     parse_hhmm,
+    zone,
 )
 from app.services.weekend import selected_weekend_variant, template_tuples
 from app.solver.schedule_solver import _add_weekly_rest
@@ -95,6 +96,33 @@ def _fixed_occupancy(
         if duty.start_date_time < slot_end_dt and slot_start_dt < duty.end_date_time:
             return True
     return False
+
+
+def _fixed_workday(
+    configuration: ScheduleConfiguration,
+    educator_id: str,
+    target_date,
+) -> bool:
+    """Przypisuje noc przechodzącą przez północ do dnia jej rozpoczęcia.
+
+    Zajętość nadal obejmuje wszystkie rzeczywiste sloty dyżuru i jest używana
+    do kontroli kolizji oraz odpoczynku. Do limitu dni pracy jeden dyżur nocny
+    może jednak dodać tylko jeden dzień, zgodnie z dniem wskazanym przez
+    użytkownika jako dzień rozpoczęcia nocki.
+    """
+    if any(
+        assignment.educator_id == educator_id
+        and assignment.date == target_date
+        for assignment in configuration.locked_assignments
+    ):
+        return True
+    project_zone = zone(configuration.time_zone_id)
+    return any(
+        duty.locked
+        and duty.educator_id == educator_id
+        and duty.start_date_time.astimezone(project_zone).date() == target_date
+        for duty in configuration.external_duty_assignments
+    )
 
 
 def _canonical_merge(assignments: list[WorkAssignment]) -> list[WorkAssignment]:
@@ -399,12 +427,19 @@ def solve_internat_schedule(
     for index in range(len(educators)):
         for day_index in range(total_days):
             values = [
-                occupied_x[(index, day_index, slot)]
+                global_x[(index, day_index, slot)]
                 for slot in range(rules.SLOTS_PER_DAY)
             ]
             work_day = model.new_bool_var(f"work_day_{index}_{day_index}")
             works_day[(index, day_index)] = work_day
-            model.add_max_equality(work_day, values)
+            if _fixed_workday(
+                configuration,
+                educators[index].id,
+                dates[day_index],
+            ):
+                model.add(work_day == 1)
+            else:
+                model.add_max_equality(work_day, values)
             for slot, current in enumerate(values):
                 previous = values[slot - 1] if slot else 0
                 start = model.new_bool_var(f"global_start_{index}_{day_index}_{slot}")

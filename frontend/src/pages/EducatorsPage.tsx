@@ -439,7 +439,7 @@ export function EducatorsPage() {
         )}
       </section>
 
-      <section className="section-block">
+      <section className="section-block" id="dostepnosc">
         <div className="section-heading"><div><span className="eyebrow">KIEDY NIE MOŻE PRACOWAĆ</span><h2>Niedostępność wychowawcy</h2></div></div>
         <div className="inline-form">
           <label>Wychowawca<select value={unavailable.educatorId} onChange={(event) => setUnavailable({ ...unavailable, educatorId: event.target.value })}><option value="">Wybierz</option>{configuration.educators.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from app.models.schemas import (
+    EducatorUnavailability,
+    ExternalDutyAssignment,
     InputStatus,
     OperationMode,
     PlanScope,
+    UnavailabilityScope,
+    UnavailabilityType,
 )
 from app.validation.input_validation import validate_configuration
 
@@ -97,3 +102,93 @@ def test_specific_date_overrides_base_plan(demo_config):
     )
     assert calculated.applied_day_plan_id == "PLAN-SPECIAL-FIRST-WEEK"
     assert calculated.total_required_minutes == 540
+
+
+def test_saturday_night_reports_exact_weekend_rest_conflict(demo_config):
+    saturday = demo_config.cycle_start_date + timedelta(days=5)
+    project_zone = ZoneInfo(demo_config.time_zone_id)
+    utc = ZoneInfo("UTC")
+    start = datetime.combine(
+        saturday,
+        datetime.min.time(),
+        tzinfo=project_zone,
+    ) + timedelta(hours=22)
+    demo_config.external_duty_assignments.append(
+        ExternalDutyAssignment(
+            id="RECURRING-NIGHT-B-1",
+            educator_id="B",
+            start_date_time=start.astimezone(utc),
+            end_date_time=(start + timedelta(hours=8)).astimezone(utc),
+            duty_type="NIGHT",
+        )
+    )
+
+    response = validate_configuration(demo_config)
+
+    assert response.status == InputStatus.INVALID_INPUT
+    conflict = next(
+        item
+        for item in response.messages
+        if item.context.get("conflictType") == "NIGHT_WEEKEND_REST"
+    )
+    assert conflict.educator_id == "B"
+    assert conflict.context["position"] == 1
+    assert conflict.required_value == 660
+    educator_name = next(item.display_name for item in demo_config.educators if item.id == "B")
+    assert educator_name in conflict.message
+    assert "22:00" in conflict.message
+
+
+def test_tuesday_night_does_not_create_false_weekend_conflict(demo_config):
+    tuesday = demo_config.cycle_start_date + timedelta(days=1)
+    project_zone = ZoneInfo(demo_config.time_zone_id)
+    start = datetime.combine(
+        tuesday,
+        datetime.min.time(),
+        tzinfo=project_zone,
+    ) + timedelta(hours=22)
+    demo_config.external_duty_assignments.append(
+        ExternalDutyAssignment(
+            id="RECURRING-NIGHT-A-1",
+            educator_id="A",
+            start_date_time=start,
+            end_date_time=start + timedelta(hours=8),
+            duty_type="NIGHT",
+        )
+    )
+
+    response = validate_configuration(demo_config)
+
+    assert not any(
+        item.context.get("conflictType") == "NIGHT_WEEKEND_REST"
+        for item in response.messages
+    )
+
+
+def test_hard_unavailability_reports_exact_weekend_position(demo_config):
+    saturday = demo_config.cycle_start_date + timedelta(days=5)
+    demo_config.unavailability.append(
+        EducatorUnavailability(
+            id="HARD-A-SATURDAY",
+            educator_id="A",
+            scope=UnavailabilityScope.SPECIFIC_DATE,
+            date=saturday,
+            start_time="06:00",
+            end_time="14:00",
+            type=UnavailabilityType.HARD,
+        )
+    )
+
+    response = validate_configuration(demo_config)
+
+    assert response.status == InputStatus.INVALID_INPUT
+    conflict = next(
+        item
+        for item in response.messages
+        if item.context.get("conflictType") == "HARD_UNAVAILABILITY_WEEKEND"
+    )
+    assert conflict.educator_id == "A"
+    assert conflict.context["position"] == 1
+    assert conflict.date == saturday
+    educator_name = next(item.display_name for item in demo_config.educators if item.id == "A")
+    assert educator_name in conflict.message
