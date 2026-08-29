@@ -278,7 +278,11 @@ export function EducatorsPage() {
           {memberships.map((membership, index) => {
             const educator = educatorById.get(membership.educatorId)!;
             return (
-              <article className="person-card" key={membership.id}>
+              <article
+                className="person-card"
+                id={`godziny-${educator.id}`}
+                key={membership.id}
+              >
                 <div className={`avatar avatar--${(index % 4) + 1}`}>{educator.shortCode}</div>
                 <div className="person-card__title"><span>{membership.role === "PRIMARY" ? "Podstawowy" : "Uzupełniający"}</span><StatusBadge value={membership.role} /></div>
                 <label>Imię i nazwisko<input value={educator.displayName} onChange={(event) => updateEducator(educator.id, "displayName", event.target.value)} /></label>

@@ -1,11 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { getRuleGuidance } from "../help";
-import type {
-  CareInterval,
-  DomainMessage,
-  ScheduleConfiguration,
-} from "../types";
+import type { CareInterval, DomainMessage, ScheduleConfiguration } from "../types";
 import { formatHoursFromMinutes } from "../time";
 
 export const DAY_NAMES = [
@@ -126,9 +122,24 @@ function messageContext(
   const educator = configuration?.educators.find(
     (item) => item.id === message.educatorId,
   );
+  const weekNumber =
+    typeof message.context.weekNumber === "number"
+      ? message.context.weekNumber
+      : null;
+  const weekendPosition =
+    typeof message.context.position === "number"
+      ? message.context.position
+      : null;
+  const dayOfWeek =
+    typeof message.context.dayOfWeek === "number"
+      ? message.context.dayOfWeek
+      : null;
   return [
     group ? `Grupa ${group.code} · ${group.name}` : null,
     educator ? `Osoba: ${educator.displayName}` : null,
+    weekNumber ? `Tydzień: ${weekNumber}` : null,
+    weekendPosition ? `Pozycja weekendu: ${weekendPosition}` : null,
+    dayOfWeek !== null ? `Dzień: ${DAY_NAMES[dayOfWeek] ?? dayOfWeek}` : null,
     message.date ? `Data: ${message.date}` : null,
     message.startTime ? `Od: ${message.startTime}` : null,
   ].filter((item): item is string => Boolean(item));
@@ -158,7 +169,7 @@ export function MessagesTable({
   return (
     <div className="message-list">
       {ordered.map((message, index) => {
-        const guidance = getRuleGuidance(message);
+        const guidance = getRuleGuidance(message, configuration);
         const context = messageContext(message, configuration);
         const hasValues =
           message.requiredValue !== null &&
@@ -186,6 +197,9 @@ export function MessagesTable({
                   ))}
                 </div>
               )}
+              <p className="message-card__destination">
+                <strong>Miejsce do poprawy:</strong> {guidance.destination}
+              </p>
               <details className="message-details">
                 <summary>Szczegóły techniczne</summary>
                 <p>{message.message}</p>

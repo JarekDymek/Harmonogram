@@ -27,7 +27,9 @@ export function SummaryPage() {
     configuration.selectedGroupIds.length;
   const errors =
     inputReport?.messages.filter((item) => item.severity === "ERROR") ?? [];
-  const firstGuidance = errors[0] ? getRuleGuidance(errors[0]) : null;
+  const firstGuidance = errors[0]
+    ? getRuleGuidance(errors[0], configuration)
+    : null;
 
   const runGeneration = async () => {
     const result = await generate();
@@ -109,7 +111,11 @@ export function SummaryPage() {
               <div>
                 <span className="eyebrow">CO ZROBIĆ TERAZ</span>
                 <h2 id="next-step-title">{firstGuidance.title}</h2>
-                <p>
+                <p>{firstGuidance.explanation}</p>
+                <p className="next-step-card__destination">
+                  <strong>Miejsce do poprawy:</strong> {firstGuidance.destination}
+                </p>
+                <p className="next-step-card__count">
                   Wykryto {errors.length} {errors.length === 1 ? "błąd" : "błędy"}.
                   Zacznij od pierwszej wskazanej pozycji, a następnie ponownie
                   sprawdź dane.

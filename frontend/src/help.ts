@@ -1,4 +1,7 @@
-import type { DomainMessage } from "./types";
+import type {
+  DomainMessage,
+  ScheduleConfiguration,
+} from "./types";
 
 export interface PageHelp {
   title: string;
@@ -10,6 +13,7 @@ export interface PageHelp {
 export interface RuleGuidance {
   title: string;
   explanation: string;
+  destination: string;
   actionLabel: string;
   actionTo: string;
 }
@@ -133,18 +137,138 @@ export function getPageHelp(pathname: string): PageHelp {
   return pageHelp[pathname] ?? pageHelp["/"];
 }
 
-export function getRuleGuidance(message: DomainMessage): RuleGuidance {
+function contextString(message: DomainMessage, key: string) {
+  const value = message.context[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function contextNumber(message: DomainMessage, key: string) {
+  const value = message.context[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function anchor(value: string) {
+  return encodeURIComponent(value);
+}
+
+function weekendTarget(
+  message: DomainMessage,
+  configuration?: ScheduleConfiguration,
+) {
+  const explicitPosition = contextNumber(message, "position");
+  const variantId =
+    contextString(message, "variantId") ??
+    contextString(message, "baseVariantId");
+  const variant = variantId
+    ? configuration?.weekendVariants.find((item) => item.id === variantId)
+    : undefined;
+  const position = explicitPosition ?? variant?.positionInCycle ?? null;
+
+  if (position !== null) {
+    return {
+      destination: `Weekendy → pozycja ${position}`,
+      actionTo: `/weekendy#weekend-pozycja-${position}`,
+    };
+  }
+  if (variant?.variantKind === "SUBSTITUTE" && variantId) {
+    return {
+      destination: "Weekendy → wskazany wariant zastępczy",
+      actionTo: `/weekendy#weekend-zastepczy-${anchor(variantId)}`,
+    };
+  }
+  return {
+    destination: "Weekendy → wzorce soboty i niedzieli",
+    actionTo: "/weekendy#wzorce-weekendowe",
+  };
+}
+
+function planTarget(
+  message: DomainMessage,
+  configuration?: ScheduleConfiguration,
+) {
+  const planId = contextString(message, "planId");
+  const plan = planId
+    ? configuration?.dayPlans.find((item) => item.id === planId)
+    : undefined;
+  const dayOfWeek =
+    contextNumber(message, "dayOfWeek") ?? plan?.dayOfWeek ?? null;
+
+  if (plan?.scope !== "BASE_WEEKLY" && planId) {
+    return {
+      destination: "Plan pobytu → wskazany plan szczególny",
+      actionTo: `/plany#plan-szczegolny-${anchor(planId)}`,
+    };
+  }
+  if (dayOfWeek !== null) {
+    const dayNames = [
+      "poniedziałek",
+      "wtorek",
+      "środę",
+      "czwartek",
+      "piątek",
+      "sobotę",
+      "niedzielę",
+    ];
+    return {
+      destination: `Plan pobytu → ${dayNames[dayOfWeek] ?? `dzień ${dayOfWeek}`}`,
+      actionTo: `/plany#plan-dzien-${dayOfWeek}`,
+    };
+  }
+  return {
+    destination: "Plan pobytu → godziny wskazanego dnia",
+    actionTo: "/plany#plany-tygodniowe",
+  };
+}
+
+export function getRuleGuidance(
+  message: DomainMessage,
+  configuration?: ScheduleConfiguration,
+): RuleGuidance {
   const ruleId = message.ruleId;
 
+  if (
+    ruleId === "REQ-CROSS-WEEK-001" &&
+    (contextString(message, "field") === "cycleStartDate" ||
+      /rozpoczynać się w poniedziałek|weekStartDay/i.test(message.message))
+  ) {
+    return {
+      title: "Ustaw początek planu na poniedziałek",
+      explanation:
+        "Godziny tygodniowe mogą być prawidłowe. Ten błąd dotyczy tylko daty początku cyklu: wybierz poniedziałek i zapisz konfigurację.",
+      destination: "Konfiguracja → Początek cyklu (poniedziałek)",
+      actionLabel: "Przejdź do daty początku",
+      actionTo: "/konfiguracja#data-poczatku-cyklu",
+    };
+  }
+
   if (ruleId === "REQ-HOURS-001") {
+    const educatorAnchor = message.educatorId
+      ? `#godziny-${anchor(message.educatorId)}`
+      : "#godziny";
     return {
       title: message.message.includes("Wymiar członkostwa")
         ? "Brakuje wymiaru godzin"
         : "Sprawdź wymiar godzin",
       explanation:
         "Każda osoba musi mieć wpisaną liczbę godzin większą niż 0 dla każdego tygodnia planu. Wartość 0 oznacza brak danych.",
+      destination: "Wychowawcy → tygodniowy wymiar wskazanej osoby",
       actionLabel: "Uzupełnij godziny",
-      actionTo: "/wychowawcy#godziny",
+      actionTo: `/wychowawcy${educatorAnchor}`,
+    };
+  }
+
+  if (
+    ruleId === "REQ-SPECIAL-DAY-001" &&
+    (/weekend|SUBSTITUTE/i.test(message.message) ||
+      contextString(message, "baseVariantId") !== null)
+  ) {
+    return {
+      title: "Dostosuj weekend do planu pobytu",
+      explanation:
+        "Bilans godzin nie jest tu problemem. W podanej dacie godziny opieki różnią się od zwykłego wzorca weekendu. Dodaj albo popraw wariant zastępczy dla wskazanego tygodnia.",
+      destination: "Weekendy → Dzień specjalny w weekend",
+      actionLabel: "Przejdź do wariantu zastępczego",
+      actionTo: "/weekendy#dzien-specjalny-weekend",
     };
   }
 
@@ -153,22 +277,26 @@ export function getRuleGuidance(message: DomainMessage): RuleGuidance {
       ruleId,
     )
   ) {
+    const target = planTarget(message, configuration);
     return {
       title: "Sprawdź plan pobytu",
       explanation:
         "Godziny opieki albo plan dnia są niepełne. Otwórz plan pobytu i sprawdź wskazany dzień.",
-      actionLabel: "Otwórz plan pobytu",
-      actionTo: "/plany",
+      destination: target.destination,
+      actionLabel: "Przejdź do wskazanego dnia",
+      actionTo: target.actionTo,
     };
   }
 
   if (["REQ-WEEKEND-001", "REQ-ROTATION-001"].includes(ruleId)) {
+    const target = weekendTarget(message, configuration);
     return {
-      title: "Uzupełnij weekendy",
+      title: "Popraw wskazany weekend",
       explanation:
-        "Rotacja weekendowa jest niepełna albo zawiera sprzeczny przydział.",
-      actionLabel: "Otwórz weekendy",
-      actionTo: "/weekendy",
+        "Tygodniowy bilans może być prawidłowy, ale wzorzec soboty lub niedzieli jest niepełny albo zawiera sprzeczny przydział.",
+      destination: target.destination,
+      actionLabel: "Przejdź do tego weekendu",
+      actionTo: target.actionTo,
     };
   }
 
@@ -184,6 +312,7 @@ export function getRuleGuidance(message: DomainMessage): RuleGuidance {
       title: "Sprawdź dostępność wychowawców",
       explanation:
         "Przydział koliduje z dostępnością, liczbą dni albo pracą tej osoby w innej grupie.",
+      destination: "Wychowawcy → dostępność wskazanej osoby",
       actionLabel: "Otwórz wychowawców",
       actionTo: "/wychowawcy",
     };
@@ -203,8 +332,9 @@ export function getRuleGuidance(message: DomainMessage): RuleGuidance {
       title: "Sprawdź reguły i odpoczynek",
       explanation:
         "Jedna z reguł organizacyjnych albo zasad odpoczynku nie jest spełniona.",
+      destination: "Reguły → zasady organizacyjne i odpoczynki",
       actionLabel: "Otwórz reguły",
-      actionTo: "/reguly",
+      actionTo: "/reguly#reguly-organizacyjne",
     };
   }
 
@@ -212,6 +342,7 @@ export function getRuleGuidance(message: DomainMessage): RuleGuidance {
     title: "Sprawdź wskazane dane",
     explanation:
       "Aplikacja wykryła pozycję wymagającą uwagi. Otwórz szczegóły techniczne, a następnie popraw wskazany formularz.",
+    destination: "Podsumowanie → szczegóły komunikatu",
     actionLabel: "Wróć do podsumowania",
     actionTo: "/podsumowanie",
   };

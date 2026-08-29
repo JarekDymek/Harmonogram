@@ -48,6 +48,10 @@ def test_cycle_must_start_on_monday(demo_config):
     response = validate_configuration(demo_config)
     assert response.status == InputStatus.INVALID_INPUT
     assert "REQ-CROSS-WEEK-001" in rule_ids(response)
+    monday_error = next(
+        item for item in response.messages if item.rule_id == "REQ-CROSS-WEEK-001"
+    )
+    assert monday_error.context["field"] == "cycleStartDate"
 
 
 def test_weekly_balance_must_be_exact(demo_config):
