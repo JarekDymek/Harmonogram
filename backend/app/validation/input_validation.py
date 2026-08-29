@@ -1041,10 +1041,23 @@ def _weekly_balance(
         }
         balances.append(balance)
         if required != assigned:
+            difference = abs(required - assigned)
+            if assigned < required:
+                description = (
+                    f"W tygodniu {week_number} brakuje {difference / 60:g} godz. "
+                    f"Plan wymaga {required / 60:g} godz., a wychowawcom "
+                    f"wpisano razem {assigned / 60:g} godz."
+                )
+            else:
+                description = (
+                    f"W tygodniu {week_number} wpisano za dużo o "
+                    f"{difference / 60:g} godz. Plan wymaga {required / 60:g} "
+                    f"godz., a wychowawcom wpisano razem {assigned / 60:g} godz."
+                )
             messages.append(
                 error(
                     rules.RULE_HOURS,
-                    f"Bilans tygodnia {week_number} nie jest równy zapotrzebowaniu.",
+                    description,
                     required=required,
                     actual=assigned,
                     context=balance,

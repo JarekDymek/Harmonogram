@@ -94,7 +94,7 @@ describe("główny przepływ interfejsu", () => {
     );
     await user.click(screen.getByRole("link", { name: /Wychowawcy/ }));
     expect(
-      await screen.findByRole("heading", { name: "4 członkostwa" }),
+      await screen.findByRole("heading", { name: "Godziny opieki · 4 osoby" }),
     ).toBeVisible();
     expect(screen.getAllByDisplayValue("Nowy wychowawca uzupełniający")).toHaveLength(1);
   });
@@ -156,10 +156,60 @@ describe("główny przepływ interfejsu", () => {
     );
     renderApp("/wychowawcy");
     expect(
-      screen.getAllByLabelText(/^Godziny tygodniowo/),
+      screen.getAllByLabelText(/^Godziny opieki/),
     ).toHaveLength(3);
     expect(screen.getAllByDisplayValue("27,5")).toHaveLength(2);
     expect(screen.queryByText("Minuty tygodniowo")).not.toBeInTheDocument();
+  });
+
+  it("zaznacza dokładny tydzień i mówi, o ile zmienić sumę godzin", () => {
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v3",
+      JSON.stringify(configurationFixture),
+    );
+    localStorage.setItem(
+      "harmonogram-mow-input-report-v3",
+      JSON.stringify({
+        status: "INVALID_INPUT",
+        messages: [
+          {
+            ruleId: "REQ-HOURS-001",
+            severity: "ERROR",
+            message: "W tygodniu 1 brakuje 2 godz.",
+            groupId: "G1",
+            context: {
+              weekNumber: 1,
+              requiredMinutes: 5040,
+              assignedMinutes: 4920,
+              differenceMinutes: -120,
+            },
+          },
+        ],
+        care: [],
+        weeklyBalance: [
+          {
+            groupId: "G1",
+            weekNumber: 1,
+            startDate: "2026-09-14",
+            endDate: "2026-09-20",
+            requiredMinutes: 5040,
+            assignedMinutes: 4920,
+            differenceMinutes: -120,
+            educatorMinutes: { A: 1650, B: 1650, C: 1620 },
+          },
+        ],
+      }),
+    );
+
+    renderApp("/wychowawcy?grupa=G1#godziny-tydzien-1");
+
+    const balanceCard = screen.getByText("brakuje 2 godz.").closest("article");
+    expect(balanceCard).toBeVisible();
+    expect(balanceCard).toHaveTextContent("zwiększ sumę pól tego tygodnia o 2 godz.");
+    for (const input of screen.getAllByLabelText(/^Godziny opieki/)) {
+      expect(input).toHaveAttribute("aria-invalid", "true");
+    }
+    expect(screen.queryByText("Globalne podsumowanie godzin")).not.toBeInTheDocument();
   });
 
   it("wymaga pełnego śladu przed zapisaniem statusu VERIFIED", async () => {

@@ -2,6 +2,7 @@ import type {
   DomainMessage,
   ScheduleConfiguration,
 } from "./types";
+import { formatHoursFromMinutes } from "./time";
 
 export interface PageHelp {
   title: string;
@@ -40,13 +41,13 @@ const pageHelp: Record<string, PageHelp> = {
   },
   "/wychowawcy": {
     title: "Wychowawcy i godziny",
-    intro: "Najważniejsze jest wpisanie wymiaru godzin dla każdej osoby w każdym tygodniu.",
+    intro: "Tutaj rozdzielasz między wychowawców godziny opieki wymagane w planie grupy.",
     steps: [
       "Sprawdź nazwisko i skrót każdej osoby.",
-      "Wpisz więcej niż 0 godzin w każdym polu „Godziny tygodniowo”.",
-      "Przy stałej nocce wybierz osobę i dzień rozpoczęcia. Godziny 22:00–06:00 oraz kolejne tygodnie aplikacja uzupełni sama.",
+      "Wpisz godziny każdego tygodnia i wybierz „Sprawdź sumy godzin”. Aplikacja poda dokładnie, ile brakuje albo o ile jest za dużo.",
+      "Nocki ustaw osobno niżej. Przy stałej nocce wybierz tylko osobę i dzień rozpoczęcia.",
     ],
-    note: "Dodatkową nockę lub nadgodziny wpisuj osobno, z konkretną datą. Możesz wtedy zmienić domyślne godziny.",
+    note: "Aplikacja nie wybiera za Ciebie osoby, której należy zmienić wymiar. Czerwono oznacza dokładny tydzień, w którym suma się nie zgadza.",
   },
   "/plany": {
     title: "Plan pobytu wychowanków",
@@ -241,7 +242,72 @@ export function getRuleGuidance(
     };
   }
 
+  if (
+    ruleId === "REQ-CROSS-WEEK-001" &&
+    /tryb skończony|przed i po horyzoncie|granicy/i.test(message.message)
+  ) {
+    return {
+      title: "To ostrzeżenie nie dotyczy godzin",
+      explanation:
+        "To ostrzeżenie nie blokuje generowania i nie wymaga zmiany godzin. Aplikacja nie zna dyżurów sprzed pierwszego dnia ani po ostatnim dniu planu, więc w planie rzeczywistym sprawdź ręcznie odpoczynek na tych dwóch granicach.",
+      destination: "Początek i koniec przygotowywanego planu",
+      actionLabel: "Wróć do podsumowania",
+      actionTo: "/podsumowanie",
+    };
+  }
+
+  if (
+    ruleId === "REQ-LEGAL-001" &&
+    /tryb demonstracyjny|nie jest dopuszczony do rzeczywistego użycia/i.test(
+      message.message,
+    )
+  ) {
+    return {
+      title: "To tylko ostrzeżenie trybu demonstracyjnego",
+      explanation:
+        "Nie dotyczy wpisanych godzin i nie blokuje ich sprawdzenia. Do rzeczywistego użycia potrzebny jest zatwierdzony profil prawny placówki.",
+      destination: "Reguły → źródło, ważność i zatwierdzenie",
+      actionLabel: "Otwórz profil prawny",
+      actionTo: "/reguly#reguly-organizacyjne",
+    };
+  }
+
   if (ruleId === "REQ-HOURS-001") {
+    const weekNumber = contextNumber(message, "weekNumber");
+    const requiredMinutes = contextNumber(message, "requiredMinutes");
+    const assignedMinutes = contextNumber(message, "assignedMinutes");
+    const differenceMinutes = contextNumber(message, "differenceMinutes");
+
+    if (
+      weekNumber !== null &&
+      requiredMinutes !== null &&
+      assignedMinutes !== null &&
+      differenceMinutes !== null
+    ) {
+      const missing = differenceMinutes < 0;
+      const difference = `${formatHoursFromMinutes(Math.abs(differenceMinutes))} godz.`;
+      const required = `${formatHoursFromMinutes(requiredMinutes)} godz.`;
+      const assigned = `${formatHoursFromMinutes(assignedMinutes)} godz.`;
+      const group = message.groupId
+        ? configuration?.groups.find((item) => item.id === message.groupId)
+        : undefined;
+      const groupLabel = group ? `grupa ${group.code} → ` : "";
+      const groupQuery = message.groupId
+        ? `?grupa=${encodeURIComponent(message.groupId)}`
+        : "";
+      return {
+        title: missing
+          ? `W tygodniu ${weekNumber} brakuje ${difference}`
+          : `W tygodniu ${weekNumber} wpisano za dużo o ${difference}`,
+        explanation: missing
+          ? `Plan wymaga ${required}, a wychowawcom wpisano razem ${assigned} Zwiększ łączną liczbę godzin tego tygodnia o ${difference}`
+          : `Plan wymaga ${required}, a wychowawcom wpisano razem ${assigned} Zmniejsz łączną liczbę godzin tego tygodnia o ${difference}`,
+        destination: `Wychowawcy → ${groupLabel}tydzień ${weekNumber}`,
+        actionLabel: `Popraw tydzień ${weekNumber}`,
+        actionTo: `/wychowawcy${groupQuery}#godziny-tydzien-${weekNumber}`,
+      };
+    }
+
     const educatorAnchor = message.educatorId
       ? `#godziny-${anchor(message.educatorId)}`
       : "#godziny";
