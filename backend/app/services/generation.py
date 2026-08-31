@@ -25,19 +25,20 @@ from app.validation.schedule_validator import validate_schedule
 from app.services.weekend import expected_weekend_position
 
 
-def _solve_once(configuration: ScheduleConfiguration, care):
+def _solve_once(configuration: ScheduleConfiguration, care, *, optimize: bool = False):
     use_internat_solver = (
         len(configuration.active_groups()) > 1
         or bool(configuration.external_duty_assignments)
         or bool(configuration.locked_assignments)
     )
     if use_internat_solver:
-        return solve_internat_schedule(configuration, care)
+        return solve_internat_schedule(configuration, care, optimize=optimize)
     group = configuration.active_groups()[0]
     group_configuration = configuration.configuration_for_group(group.id)
     return solve_schedule(
         group_configuration,
         [item for item in care if item.group_id == group.id],
+        optimize=optimize,
     )
 
 
@@ -257,6 +258,8 @@ def _diagnose_no_solution(
 
 def generate_schedule(
     configuration: ScheduleConfiguration,
+    *,
+    optimize: bool = False,
 ) -> GenerateResponse:
     next_weekend_variant = expected_weekend_position(
         configuration.starting_weekend_variant,
@@ -272,7 +275,7 @@ def generate_schedule(
             next_weekend_variant=next_weekend_variant,
         )
 
-    solver_result = _solve_once(configuration, input_report.care)
+    solver_result = _solve_once(configuration, input_report.care, optimize=optimize)
     if solver_result.status == GenerationStatus.NO_SOLUTION:
         diagnostic_messages = _diagnose_no_solution(
             configuration,
@@ -351,11 +354,25 @@ def generate_schedule(
             messages=[
                 info(
                     rules.RULE_NO_GUESSING,
-                    "Nie udowodniono optymalności w limicie czasu; żaden wynik nie został opublikowany.",
-                    context={"solverStatus": solver_result.solver_status_name},
+                    "Nie znaleziono jeszcze planu spełniającego wszystkie wymagane warunki. "
+                    "To limit obliczeń, nie błąd wpisanych godzin ani dowód sprzeczności danych. "
+                    "Wybierz „Szukaj dłużej”, bez ponownego wpisywania danych.",
+                    context={"solverStatus": solver_result.solver_status_name, "conflictType": "SEARCH_LIMIT"},
                 )
             ],
             next_weekend_variant=next_weekend_variant,
+        )
+
+    if solver_result.status != GenerationStatus.CANDIDATE_FOUND:
+        return GenerateResponse(
+            generation_status=GenerationStatus.INTERNAL_ERROR,
+            public_result=PublicResult.BLAD_WEWNETRZNY,
+            care=input_report.care,
+            messages=[error(
+                rules.RULE_NO_GUESSING,
+                "Generator nie mógł uruchomić modelu obliczeń. To błąd programu, nie danych użytkownika.",
+                context={"solverStatus": solver_result.solver_status_name},
+            )],
         )
 
     validation = validate_schedule(
@@ -367,7 +384,6 @@ def generate_schedule(
         return GenerateResponse(
             generation_status=GenerationStatus.INTERNAL_ERROR,
             public_result=PublicResult.BLAD_WEWNETRZNY,
-            assignments=solver_result.assignments,
             care=input_report.care,
             validation_report=validation,
             messages=validation.messages,
@@ -394,10 +410,13 @@ def generate_schedule(
                 else [
                     info(
                         rules.RULE_NO_GUESSING,
-                        "Kandydat spełnia wszystkie reguły twarde; w limicie czasu nie zakończono dowodu optymalności celu leksykograficznego.",
+                        "Propozycja planu przeszła pełną kontrolę wymaganych warunków. "
+                        "Można opcjonalnie ulepszyć jej układ, np. zmniejszyć liczbę podzielonych dni. "
+                        "Brak najlepszego możliwego podziału nie unieważnia tego planu.",
                         context={
                             "solverStatus": solver_result.solver_status_name,
                             "hardValidation": "VALID",
+                            "conflictType": "QUALITY_OPTIONAL",
                         },
                     )
                 ]

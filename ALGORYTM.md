@@ -283,8 +283,10 @@ Statusy przebiegu:
 Przy `TIME_LIMIT`:
 
 * publiczny wynik brzmi `NIE_ZAKONCZONO_WYSZUKIWANIA`,
-* kandydat może zostać zachowany tylko diagnostycznie,
-* kandydat nie jest publikowany jako harmonogram końcowy.
+* status dotyczy wyłącznie braku kandydata spełniającego wymagane warunki,
+* istniejący kandydat przechodzi niezależną kontrolę; wynik `VALID` wystarcza do publikacji poprawnej propozycji bez dowodu optymalności.
+
+Domyślny model zawiera tylko wymagane ograniczenia i kończy szukanie po pierwszym rozwiązaniu. Zmienne oceny preferencji są budowane dopiero na żądanie opcjonalnego ulepszania. PWA przechowuje dotychczasowy poprawny plan, jeżeli ulepszanie nie dostarczy lepszego poprawnego wyniku.
 
 ---
 
@@ -386,7 +388,8 @@ function generujCykl(dane):
     model = utworzModelOgraniczen(dane, zapotrzebowanie)
     wstawDokladneWzorceWeekendowe(model, dane.weekendTemplates)
     dodajOgraniczeniaKrytyczne(model)
-    dodajMierzalnePreferencje(model)
+    if opcjonalneUlepszanie:
+        dodajMierzalnePreferencje(model)
 
     wynik = uruchomSolver(model)
 
@@ -394,7 +397,7 @@ function generujCykl(dane):
         return BRAK_ROZWIAZANIA + raportKonfliktu
 
     if wynik.status == TIME_LIMIT:
-        zachowajKandydataTylkoDiagnostycznie(wynik)
+        # TIME_LIMIT występuje tu tylko bez kandydata.
         return NIE_ZAKONCZONO_WYSZUKIWANIA + raportDzialania
 
     if wynik.status == INTERNAL_ERROR:

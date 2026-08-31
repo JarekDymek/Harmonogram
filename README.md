@@ -288,10 +288,15 @@ Historyczne raporty spójności nie zostały zmodyfikowane przez implementację.
 - brak automatycznego tworzenia zastępstw i wariantów weekendowych;
 - raport konfliktu solvera ma jawnie oznaczoną jakość `APPROXIMATE` i nie
   deklaruje minimalnego rdzenia sprzeczności;
-- solver najpierw znajduje kandydata spełniającego wszystkie reguły twarde,
-  a następnie optymalizuje go leksykograficznie; jeżeli limit przerwie dowód
-  optymalności, poprawny kandydat jest publikowany z oznaczeniem
-  `NAJLEPSZA ZNALEZIONA`, nie jako optimum udowodnione;
+- domyślny generator buduje tylko model wymaganych warunków i kończy po
+  znalezieniu pierwszego planu; niezależna kontrola musi zwrócić `VALID`;
+- propozycja nie czeka na idealny podział preferencji. Osobne „Spróbuj ulepszyć
+  podział” uruchamia optymalizację; pusty, odrzucony lub gorszy wynik nie zastępuje
+  dotychczasowego poprawnego planu;
+- PWA daje pierwszej próbie co najmniej 60 sekund obliczeń; „Szukaj dłużej” daje
+  co najmniej 180 sekund bez zmiany zapisanej konfiguracji. Limit bez kandydata
+  nie jest dowodem sprzeczności danych. API obsługuje `POST /api/generate?optimize=true`
+  jako osobne żądanie ulepszania; `/api/health` identyfikuje wersję generatora;
 - stałe dyżury nocne są blokowane automatycznie w każdym tygodniu; dodatkowe
   nocki i nadgodziny nadal wymagają wskazania konkretnej daty;
 - dzień wskazany przy stałej nocce jest dniem jej rozpoczęcia; standardowy

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { DAY_NAMES, EmptyState, MessagesTable, PageHeader, StatusBadge, formatMinutes, minutesToTime } from "../components/UI";
 import { useAppState } from "../state/AppState";
+import { isValidatedPlan } from "../generation";
 
 function educatorColor(educatorId: string) {
   let hash = 0;
@@ -24,7 +25,7 @@ export function InternatPage() {
   const groups = configuration.groups
     .filter((item) => item.active)
     .sort((a, b) => a.displayOrder - b.displayOrder);
-  const assignments = generation?.assignments.filter((item) => weekDates.includes(item.date)) ?? [];
+  const assignments = isValidatedPlan(generation) ? generation.assignments.filter((item) => weekDates.includes(item.date)) : [];
   const educatorById = new Map(configuration.educators.map((item) => [item.id, item]));
 
   return (
@@ -41,7 +42,7 @@ export function InternatPage() {
           </button>
         ))}
       </div>
-      {!generation?.assignments.length ? (
+      {!isValidatedPlan(generation) ? (
         <EmptyState>Wygeneruj harmonogram, aby zobaczyć wspólną tabelę internatu.</EmptyState>
       ) : (
         <section className="internat-table-wrap">

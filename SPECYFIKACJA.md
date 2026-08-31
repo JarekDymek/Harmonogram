@@ -124,7 +124,7 @@ Harmonogram może otrzymać publiczny wynik:
 * `NIE_ZAKONCZONO_WYSZUKIWANIA` – solver osiągnął limit czasu,
 * `BLAD_WEWNETRZNY` – wystąpiła rozbieżność modułów albo błąd systemu.
 
-Kandydat znaleziony przed limitem czasu może służyć wyłącznie diagnostyce i nie jest publikowany jako harmonogram końcowy.
+Kandydat spełniający wszystkie wymagane warunki jest publikowany jako propozycja planu po niezależnej walidacji. Nie trzeba udowadniać optymalności podziału preferencji. Limit czasu oznacza brak ukończonego wyszukiwania tylko wtedy, gdy nie znaleziono żadnego poprawnego kandydata; ulepszanie jakości jest osobną, opcjonalną operacją.
 
 ## 9. Konfiguracja prawna
 

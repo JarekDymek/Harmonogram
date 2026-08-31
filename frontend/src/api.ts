@@ -7,6 +7,11 @@ import { prepareConfigurationForApi } from "./nightDuties";
 
 const API_BASE_URL_KEY = "harmonogram-mow-api-base-url-v1";
 
+export interface GenerationOptions {
+  optimize?: boolean;
+  timeLimitSeconds?: number;
+}
+
 export function normalizeApiBaseUrl(value: string): string {
   const normalized = value.trim().replace(/\/+$/, "");
   if (!normalized) return "";
@@ -82,9 +87,15 @@ export const api = {
         body: JSON.stringify(prepareConfigurationForApi(configuration)),
       },
     ),
-  generate: (configuration: ScheduleConfiguration) =>
-    request<GenerateResponse>("/api/generate", {
+  generate: (configuration: ScheduleConfiguration, options: GenerationOptions = {}) =>
+    request<GenerateResponse>(`/api/generate${options.optimize ? "?optimize=true" : ""}`, {
       method: "POST",
-      body: JSON.stringify(prepareConfigurationForApi(configuration)),
+      body: JSON.stringify({
+        ...prepareConfigurationForApi(configuration),
+        // Budget belongs to this request only; never rewrite saved user data.
+        solverTimeLimitSeconds: Math.min(300, Math.max(
+          options.timeLimitSeconds ?? 60, configuration.solverTimeLimitSeconds,
+        )),
+      }),
     }),
 };
