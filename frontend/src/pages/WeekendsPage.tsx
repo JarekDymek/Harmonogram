@@ -160,7 +160,7 @@ export function WeekendsPage() {
       <PageHeader
         eyebrow="KROK 05 · WEEKENDY"
         title="Zatwierdzone wzorce 1:1"
-        description="Każdy odcinek jest wejściem krytycznym. Dla czterech osób wzorzec nadal jawnie wskazuje dokładnie dwie osoby pracujące, bez automatycznego założenia o sprawiedliwości."
+        description="Wzorzec ustala opiekę dzienną w sobotę i niedzielę. Brak dyżuru w tym wzorcu nie oznacza dnia wolnego: nocki, szkoła i praca w innych grupach są liczone osobno w całkowitych dniach pracy."
         actions={
           <button className="button button--primary" type="button" onClick={save}>
             Zapisz wzorce
@@ -195,7 +195,7 @@ export function WeekendsPage() {
                 <h2>Pozycja {variant.positionInCycle}</h2>
               </div>
               <div className="off-person">
-                <small>Nie pracują</small>
+                <small>Bez opieki dziennej w tym wzorcu</small>
                 <strong>{notWorking || "—"}</strong>
               </div>
             </header>
@@ -323,7 +323,7 @@ export function WeekendsPage() {
             />
           </label>
           <label>
-            Oznaczona osoba niepracująca
+            Osoba bez opieki dziennej w tym wzorcu
             <select {...substituteForm.register("offEducatorId")}>
               {configuration.educatorCount === 4 && (
                 <option value="">Bez pojedynczego wskazania</option>

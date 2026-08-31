@@ -84,6 +84,16 @@ describe("poprawny plan przed optymalizacją", () => {
     expect(screen.queryByRole("heading", {name: "Propozycja planu jest gotowa i sprawdzona"})).not.toBeInTheDocument();
   });
 
+  it("nie pokazuje komunikatu o poprawności starego planu przed nową kontrolą", () => {
+    show({...plan,
+      validationReport: {...plan.validationReport!, validatorVersion: "1.0.0"},
+      messages: [{severity: "INFO", ruleId: "REQ-NO-GUESSING-001", message: "Stary plan jest poprawny.", context: {}}],
+    });
+    expect(screen.getByRole("heading", {name: "Przelicz plan według nowych zasad dni pracy"})).toBeVisible();
+    expect(screen.queryByRole("heading", {name: "Plan jest poprawny; ulepszenie podziału jest opcjonalne"})).not.toBeInTheDocument();
+    expect(screen.getByRole("button", {name: "Uruchom generator"})).toBeEnabled();
+  });
+
   it("nie traci dobrego planu, gdy przerwie się połączenie", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     show(plan);

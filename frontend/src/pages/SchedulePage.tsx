@@ -104,7 +104,7 @@ export function SchedulePage() {
             {busy ? "Układam i sprawdzam plan…" : generation?.generationStatus === "TIME_LIMIT" ? "Szukaj dłużej" : "Uruchom generator"}
           </button>
         </section>
-        {generation?.messages.length ? (
+        {!stale && generation?.messages.length ? (
           <section className="section-block">
             <MessagesTable messages={generation.messages} configuration={configuration} />
           </section>
