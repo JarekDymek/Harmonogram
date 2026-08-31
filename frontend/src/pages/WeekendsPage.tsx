@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { EmptyState, PageHeader, StatusBadge } from "../components/UI";
 import { useAppState } from "../state/AppState";
-import type { WeekendVariant } from "../types";
+import type { WeekendVariant, WeekendDaysOffPattern } from "../types";
+import { WeekendDaysOffEditor, validDaysOff } from "../components/WeekendDaysOffEditor";
 
 export function WeekendsPage() {
-  const { configuration, setConfiguration } = useAppState();
+  const { configuration, setConfiguration, inputReport } = useAppState();
   const [variants, setVariants] = useState<WeekendVariant[]>([]);
+  const [daysOffPatterns, setDaysOffPatterns] = useState<WeekendDaysOffPattern[]>([]);
+  const [saveMessage, setSaveMessage] = useState("");
   const substituteForm = useForm<{
     basePosition: number;
     weekNumber: number;
@@ -17,6 +20,7 @@ export function WeekendsPage() {
 
   useEffect(() => {
     if (configuration) {
+      setDaysOffPatterns(structuredClone(configuration.weekendDaysOffPatterns ?? []));
       const memberIds = new Set(
         configuration.groupMemberships
           .filter(
@@ -90,16 +94,22 @@ export function WeekendsPage() {
     );
   };
 
-  const save = () => {
+  const save = (nextVariants = variants) => {
+    if (daysOffPatterns.some(pattern => !validDaysOff(pattern))) {
+      setSaveMessage("Nie zapisano zmian: wybierz dwa różne dni w czerwonym wzorcu wolnego.");
+      return;
+    }
     setConfiguration({
       ...configuration,
+      weekendDaysOffPatterns: daysOffPatterns,
       weekendVariants: [
         ...configuration.weekendVariants.filter(
           (item) => item.groupId !== configuration.activeGroupId,
         ),
-        ...variants,
+        ...nextVariants,
       ],
     });
+    setSaveMessage("Zapisano wzorce weekendów i dni wolnych. Teraz sprawdź dane i wygeneruj plan ponownie.");
   };
 
   const addSubstitute = substituteForm.handleSubmit((values) => {
@@ -144,29 +154,26 @@ export function WeekendsPage() {
       item,
     ];
     setVariants(next);
-    setConfiguration({
-      ...configuration,
-      weekendVariants: [
-        ...configuration.weekendVariants.filter(
-          (existing) => existing.groupId !== configuration.activeGroupId,
-        ),
-        ...next,
-      ],
-    });
+    save(next);
   });
 
   return (
     <>
       <PageHeader
         eyebrow="KROK 05 · WEEKENDY"
-        title="Zatwierdzone wzorce 1:1"
+        title="Weekendy i stałe dni wolne"
         description="Wzorzec ustala opiekę dzienną w sobotę i niedzielę. Brak dyżuru w tym wzorcu nie oznacza dnia wolnego: nocki, szkoła i praca w innych grupach są liczone osobno w całkowitych dniach pracy."
         actions={
-          <button className="button button--primary" type="button" onClick={save}>
+          <button className="button button--primary" type="button" onClick={() => save()}>
             Zapisz wzorce
           </button>
         }
       />
+      {saveMessage && <p role="status">{saveMessage}</p>}
+      <WeekendDaysOffEditor educators={groupEducators} patterns={daysOffPatterns}
+        messages={inputReport?.messages ?? []} onChange={patterns => {
+          setDaysOffPatterns(patterns); setSaveMessage("Niezapisane zmiany — kliknij Zapisz wzorce.");
+        }} />
       <div className="weekend-grid" id="wzorce-weekendowe">
         {base.map((variant) => {
           const working = new Set([
@@ -367,16 +374,7 @@ export function WeekendsPage() {
                         (value) => value.id !== item.id,
                       );
                       setVariants(next);
-                      setConfiguration({
-                        ...configuration,
-                        weekendVariants: [
-                          ...configuration.weekendVariants.filter(
-                            (existing) =>
-                              existing.groupId !== configuration.activeGroupId,
-                          ),
-                          ...next,
-                        ],
-                      });
+                      save(next);
                     }}
                   >
                     ×

@@ -253,6 +253,7 @@ export interface ScheduleConfiguration {
   legalRules: LegalRules;
   organizationalRules: OrganizationalRules;
   weekendVariants: WeekendVariant[];
+  weekendDaysOffPatterns?: WeekendDaysOffPattern[];
   recurringNightDuties?: RecurringNightDuty[];
   recurringRequiredDuties?: RecurringWork[];
   recurringSchoolWork?: RecurringWork[];
@@ -271,6 +272,13 @@ export interface ScheduleConfiguration {
   solverTimeLimitSeconds: number;
   randomSeed: number;
   demonstrationNotice?: string | null;
+}
+
+export interface WeekendDaysOffPattern {
+  id: string;
+  educatorId: string;
+  daysOff: number[];
+  active: boolean;
 }
 
 export interface DomainMessage {

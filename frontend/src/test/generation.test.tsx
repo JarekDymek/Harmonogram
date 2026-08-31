@@ -13,7 +13,7 @@ const plan: GenerateResponse = {
   generationStatus: "CANDIDATE_FOUND", publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY",
   assignments: [{groupId: "G1", educatorId: "A", date: "2026-09-14", startMinute: 360, endMinute: 480}],
   care: [], messages: [], optimizationProven: false,
-  validationReport: {status: "VALID", publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY", validatorVersion: "2.0.0",
+  validationReport: {status: "VALID", publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY", validatorVersion: "3.0.0",
     legalProfileStatus: "UNVERIFIED", legalProfileVersion: "test", messages: []},
   objective: {splitDaysPenalty: 2, continuousBlockHandovers: 2, distinctEducatorsPerBlock: 2,
     totalSegments: 4, shortMiddleSegments: 0, preferredUnavailabilityPenalty: 0,
@@ -32,6 +32,7 @@ function show(result: GenerateResponse) {
 describe("poprawny plan przed optymalizacją", () => {
   it("wymaga wyniku niezależnej kontroli, nie tylko niepustego planu", () => {
     expect(isValidatedPlan(plan)).toBe(true);
+    expect(isValidatedPlan({...plan, validationReport: {...plan.validationReport!, validatorVersion: "2.0.0"}})).toBe(false);
     expect(isValidatedPlan({...plan, validationReport: null})).toBe(false);
     expect(isValidatedPlan({...plan, publicResult: "BLAD_WEWNETRZNY"})).toBe(false);
     expect(isValidatedPlan({...plan, validationReport: {...plan.validationReport!, status: "INVALID"}})).toBe(false);

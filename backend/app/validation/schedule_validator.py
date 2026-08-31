@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from app.domain import rules
 from app.validation.work_calendar import commitment_messages, night_assignment_messages, combined_limit_messages
+from app.validation.weekend_days_off import weekend_days_off_messages
 from app.models.schemas import (
     CalculatedCareDay,
     CareInterval,
@@ -356,11 +357,11 @@ def _hours_and_days_messages(
             required_days = (
                 configuration.organizational_rules.required_work_days_per_week
             )
-            if actual_days > required_days:
+            if actual_days != required_days:
                 messages.append(
                     error(
                         rules.RULE_DAYS,
-                        "Więcej niż pięć dni pracy w tygodniu. Potrzebne są dwa całkowicie wolne dni.",
+                        f"Plan zawiera {actual_days} dni pracy zamiast pięciu. Wygeneruj plan ponownie; nie zmieniaj sumy godzin tylko po to, by ukryć ten błąd.",
                         educator_id=educator.id,
                         date_value=start,
                         required=required_days,
@@ -1151,6 +1152,7 @@ def _no_return_messages(
 def _cross_group_messages(
     configuration: ScheduleConfiguration,
     assignments: list[WorkAssignment],
+    *, complete: bool = False,
 ) -> list[DomainMessage]:
     messages: list[DomainMessage] = []
     all_assignments = canonicalize_assignments(
@@ -1247,16 +1249,16 @@ def _cross_group_messages(
                 for duty_educator_id, duty_date in external_start_dates
                 if duty_educator_id == educator_id and start <= duty_date < end
             )
-            if len(days) > required_days:
+            if len(days) > required_days or (complete and len(days) != required_days):
                 messages.append(
                     error(
                         rules.RULE_DAYS,
-                        "Szkoła, internat i obie daty nocki zajmują więcej niż pięć dni. Przenieś dyżur na już zajęty dzień, zachowując odpoczynek.",
+                        f"Szkoła, internat i obie daty nocki zajmują łącznie {len(days)} dni zamiast pięciu. Wygeneruj plan ponownie; każdy tydzień musi mieć pięć dni pracy i dwa całkowicie wolne.",
                         educator_id=educator_id,
                         date_value=start,
                         required=required_days,
                         actual=len(days),
-                        context={"weekNumber": week_number},
+                        context={"weekNumber": week_number, "workDates": [str(d) for d in sorted(days)]},
                     )
                 )
     return messages
@@ -1303,6 +1305,7 @@ def _validate_internat_schedule(
             len(active_groups) > 1
             or bool(configuration.external_duty_assignments)
             or bool(configuration.locked_assignments)
+            or bool(configuration.required_assignments)
         )
         ignored_global_rules = (
             {
@@ -1326,7 +1329,8 @@ def _validate_internat_schedule(
     messages.extend(_no_return_messages(independent_care, canonical))
     messages.extend(commitment_messages(configuration, independent_care, canonical))
     messages.extend(night_assignment_messages(configuration, canonical))
-    messages.extend(_cross_group_messages(configuration, canonical))
+    messages.extend(_cross_group_messages(configuration, canonical, complete=True))
+    messages.extend(weekend_days_off_messages(configuration, canonical))
     objective = calculate_objective(configuration, independent_care, canonical)
     has_errors = any(item.severity == "ERROR" for item in messages)
     if has_errors:
@@ -1362,7 +1366,7 @@ def validate_schedule(
 ) -> ValidationReport:
     if not _group_view and (len(configuration.groups) > 1 or any(
         item.group_id is None for item in configuration.educators
-    ) or configuration.external_duty_assignments or configuration.required_assignments or configuration.locked_assignments):
+    ) or configuration.external_duty_assignments or configuration.required_assignments or configuration.locked_assignments or configuration.weekend_days_off_patterns):
         return _validate_internat_schedule(
             configuration,
             assignments,

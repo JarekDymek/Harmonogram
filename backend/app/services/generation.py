@@ -31,6 +31,7 @@ def _solve_once(configuration: ScheduleConfiguration, care, *, optimize: bool = 
         or bool(configuration.external_duty_assignments)
         or bool(configuration.locked_assignments)
         or bool(configuration.required_assignments)
+        or bool(configuration.weekend_days_off_patterns)
     )
     if use_internat_solver:
         return solve_internat_schedule(configuration, care, optimize=optimize)
@@ -66,6 +67,19 @@ def _diagnose_no_solution(
             configuration.solver_time_limit_seconds,
         )
         return _solve_once(candidate, care).status == GenerationStatus.CANDIDATE_FOUND
+
+    for pattern in configuration.weekend_days_off_patterns:
+        if not pattern.active:
+            continue
+        candidate = configuration.model_copy(deep=True)
+        candidate.weekend_days_off_patterns = [p for p in candidate.weekend_days_off_patterns if p.id != pattern.id]
+        if attempt(candidate):
+            educator = educator_by_id.get(pattern.educator_id)
+            name = educator.display_name if educator else pattern.educator_id
+            return [error("REQ-WEEKEND-DAYS-OFF-001",
+                          f"{name}: plan spełniający pięć dni pracy staje się możliwy po zmianie wzorca wolnego za weekend. "
+                          "W kroku Weekendy wybierz inną parę dni albo zmień obsadę weekendu. Zapisane dane nie zostały zmienione.",
+                          educator_id=pattern.educator_id, context={"patternId": pattern.id})]
 
     locked_duties = [
         item for item in configuration.external_duty_assignments if item.locked
@@ -236,7 +250,7 @@ def _diagnose_no_solution(
             )
         ]
 
-    for work_days in (6,):
+    for work_days in (4, 6):
         candidate = configuration.model_copy(deep=True)
         candidate.organizational_rules.required_work_days_per_week = work_days
         if attempt(candidate):
@@ -245,7 +259,7 @@ def _diagnose_no_solution(
                     rules.RULE_DAYS,
                     (
                         "Suma godzin jest poprawna, ale nie da się jej rozłożyć "
-                        "na najwyżej pięć dni pracy każdej osoby przy obecnych "
+                        "na dokładnie pięć dni pracy każdej osoby przy obecnych "
                         "nockach, weekendach i niedostępności. Sprawdź osobę z "
                         "największą liczbą zablokowanych dni."
                     ),

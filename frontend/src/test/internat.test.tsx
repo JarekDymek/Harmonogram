@@ -29,7 +29,7 @@ describe("projekt internatu", () => {
       JSON.stringify({
         generationStatus: "CANDIDATE_FOUND",
         publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY",
-        validationReport: { status: "VALID", validatorVersion: "2.0.0" },
+        validationReport: { status: "VALID", validatorVersion: "3.0.0" },
         assignments: [
           { groupId: "G1", educatorId: "A", date: "2026-09-14", startMinute: 360, endMinute: 480 },
         ],

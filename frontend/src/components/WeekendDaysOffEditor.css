@@ -1,0 +1,11 @@
+.weekend-off-card { padding: 1rem; border: 1px solid #c7d2d9; border-radius: 12px; }
+.weekend-off-card h3 { margin: 0 0 1rem; }
+.weekend-off-card .inline-form { flex-wrap: wrap; }
+.weekend-off-card .inline-form label { min-width: 0; }
+.weekend-off-card--error { border: 2px solid #a92222; background: #fff7f7; }
+.weekend-off-card--error [role="alert"] { color: #a92222; }
+.weekend-off-card select[aria-invalid="true"] { border: 2px solid #a92222; }
+@media (max-width: 640px) {
+  .weekend-off-card .inline-form { display: grid; grid-template-columns: 1fr; }
+  .weekend-off-card select, .weekend-off-card button { max-width: 100%; width: 100%; }
+}

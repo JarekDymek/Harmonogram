@@ -5,6 +5,7 @@ import {
   StatusBadge,
 } from "../components/UI";
 import { useAppState } from "../state/AppState";
+import { VALIDATOR_VERSION } from "../workRules";
 
 export function ValidationPage() {
   const { generation } = useAppState();
@@ -16,7 +17,7 @@ export function ValidationPage() {
       </EmptyState>
     );
   }
-  if (report.validatorVersion !== "2.0.0") return <EmptyState title="Poprzedni wynik wymaga ponownego sprawdzenia">Dane zachowano. Przejdź do Harmonogramu i uruchom generator uwzględniający obie daty nocki oraz pracę w szkole.</EmptyState>;
+  if (report.validatorVersion !== VALIDATOR_VERSION) return <EmptyState title="Poprzedni wynik wymaga ponownego sprawdzenia">Dane zachowano. W Harmonogramie uruchom generator: sprawdzi dokładnie pięć dni pracy, obie daty nocki, szkołę oraz stałe dni wolne za weekend.</EmptyState>;
   return (
     <>
       <PageHeader
