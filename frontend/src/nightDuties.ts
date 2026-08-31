@@ -5,6 +5,7 @@ import type {
   GroupEducatorMembership,
   WorkAssignment,
 } from "./types";
+import { WORK_RULES_VERSION } from "./workRules";
 
 export const NIGHT_START_TIME = "22:00";
 export const NIGHT_END_TIME = "06:00";
@@ -238,7 +239,8 @@ export function calendarDuties(configuration: ScheduleConfiguration) {
 
 // Add the nights once. The old day-care allocation and every original input survive.
 export function migrateWorkCalendar(configuration: ScheduleConfiguration): ScheduleConfiguration {
-  const next = { ...configuration, workRulesVersion: 2,
+  const next = { ...configuration, workRulesVersion: WORK_RULES_VERSION,
+    weekendDaysOffPatterns: configuration.weekendDaysOffPatterns ?? [],
     recurringRequiredDuties: configuration.recurringRequiredDuties ?? [],
     recurringSchoolWork: configuration.recurringSchoolWork ?? [],
     requiredAssignments: configuration.requiredAssignments ?? [],

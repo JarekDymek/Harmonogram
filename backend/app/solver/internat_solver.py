@@ -470,8 +470,21 @@ def solve_internat_schedule(
                     works_day[(index, day_index)]
                     for day_index in range(week_index * 7, (week_index + 1) * 7)
                 )
-                <= configuration.organizational_rules.required_work_days_per_week
+                == configuration.organizational_rules.required_work_days_per_week
             )
+
+    # One personal pattern across all groups. A night touching Saturday/Sunday
+    # triggers it too, since works_day includes the entire fixed-work calendar.
+    for pattern in configuration.weekend_days_off_patterns:
+        if not pattern.active or pattern.educator_id not in educator_index:
+            continue
+        index = educator_index[pattern.educator_id]
+        for week_index in range(total_weeks):
+            offset = week_index * 7
+            weekend_work = model.new_bool_var(f"weekend_work_{pattern.id}_{week_index}")
+            model.add_max_equality(weekend_work, [works_day[(index, offset + d)] for d in (5, 6)])
+            for day in pattern.days_off:
+                model.add(works_day[(index, offset + day)] == 0).only_enforce_if(weekend_work)
 
     # Ustalone, grupowe wzorce weekendowe.
     for group_id in group_ids:

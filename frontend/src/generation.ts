@@ -1,4 +1,5 @@
 import type { GenerateResponse, ValidationReport } from "./types";
+import { VALIDATOR_VERSION } from "./workRules";
 
 type ValidatedPlan = GenerateResponse & {
   validationReport: ValidationReport & { status: "VALID" };
@@ -9,7 +10,7 @@ export function isValidatedPlan(result: GenerateResponse | null): result is Vali
   return Boolean(
     result?.assignments.length &&
     result.validationReport?.status === "VALID" &&
-    result.validationReport.validatorVersion === "2.0.0" &&
+    result.validationReport.validatorVersion === VALIDATOR_VERSION &&
     ["POPRAWNY", "POPRAWNY_TRYB_DEMONSTRACYJNY"].includes(result.publicResult),
   );
 }

@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from app.domain import rules
 from app.validation.work_calendar import commitment_messages
+from app.validation.weekend_days_off import weekend_days_off_messages
 from app.models.schemas import (
     CalculatedCareDay,
     DomainMessage,
@@ -192,6 +193,7 @@ def _validate_internat_project(
             [{**item, "groupId": group.id} for item in report.weekly_balance]
         )
     messages.extend(commitment_messages(configuration, care))
+    messages.extend(weekend_days_off_messages(configuration, care=care))
     from app.validation.schedule_validator import _cross_group_messages
     messages.extend(m for m in _cross_group_messages(configuration, [a for a in configuration.required_assignments if a.group_id in configuration.selected_group_ids])
                     if m.context.get("relatedRuleId") != rules.RULE_REST_WEEKLY)
@@ -265,7 +267,7 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
         messages.append(
             error(
                 rules.RULE_DAYS,
-                "Limit wynosi najwyżej pięć dni pracy i co najmniej dwa dni całkowicie wolne.",
+                "Plan wymaga dokładnie pięciu dni pracy i dwóch dni całkowicie wolnych w tygodniu.",
                 required=5,
                 actual=org.required_work_days_per_week,
             )
@@ -1348,7 +1350,7 @@ def validate_configuration(
 ) -> InputValidationResponse:
     if not _group_view and (len(configuration.groups) > 1 or any(
         item.group_id is None for item in configuration.educators
-    ) or configuration.external_duty_assignments or configuration.required_assignments or configuration.locked_assignments):
+    ) or configuration.external_duty_assignments or configuration.required_assignments or configuration.locked_assignments or configuration.weekend_days_off_patterns):
         return _validate_internat_project(configuration)
     messages = _structural_messages(configuration)
     if _has_errors(messages):

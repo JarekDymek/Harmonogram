@@ -58,11 +58,15 @@ describe("wspólny kalendarz pracy", () => {
   });
 
   it("zachowuje prywatną kopię oryginału przed pierwszym zapisem migracji", () => {
-    const old = {...configurationFixture,workRulesVersion:1};
+    const old = {...configurationFixture,workRulesVersion:2};
+    const previousResult = {generationStatus:"CANDIDATE_FOUND",validationReport:{validatorVersion:"2.0.0"}};
     localStorage.setItem(key,JSON.stringify(old));
+    localStorage.setItem("harmonogram-mow-generation-v3",JSON.stringify(previousResult));
     render(<MemoryRouter><AppStateProvider><App /></AppStateProvider></MemoryRouter>);
-    expect(JSON.parse(localStorage.getItem(`${key}-before-work-calendar-TEST`)!).configuration).toEqual(old);
-    expect(JSON.parse(localStorage.getItem(key)!).workRulesVersion).toBe(2);
+    const backup = JSON.parse(localStorage.getItem(`${key}-before-work-calendar-v3-TEST`)!);
+    expect(backup.configuration).toEqual(old);
+    expect(backup.generation).toEqual(previousResult);
+    expect(JSON.parse(localStorage.getItem(key)!).workRulesVersion).toBe(3);
   });
 
   it("brak miejsca na kopię nie nadpisuje oryginalnych danych", () => {

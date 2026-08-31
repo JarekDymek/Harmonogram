@@ -360,8 +360,16 @@ class BoundaryContext(APIModel):
     educators: list[EducatorBoundaryContext] = Field(default_factory=list)
 
 
+class WeekendDaysOffPattern(APIModel):
+    id: str = Field(default_factory=_id)
+    educator_id: str
+    # Validate semantic mistakes as actionable domain messages, not opaque 422s.
+    days_off: list[int] = Field(default_factory=list)
+    active: bool = True
+
+
 class ScheduleConfiguration(APIModel):
-    work_rules_version: int = 2
+    work_rules_version: int = 3
     schema_version: int = Field(default=3, ge=2)
     project_id: str
     project_name: str
@@ -393,6 +401,7 @@ class ScheduleConfiguration(APIModel):
     legal_rules: LegalRulesConfiguration
     organizational_rules: OrganizationalRulesConfiguration
     weekend_variants: list[WeekendRotationVariant]
+    weekend_days_off_patterns: list[WeekendDaysOffPattern] = Field(default_factory=list)
     external_duty_assignments: list[ExternalDutyAssignment] = Field(default_factory=list)
     common_area_duties: list[CommonAreaDuty] = Field(default_factory=list)
     locked_assignments: list["WorkAssignment"] = Field(default_factory=list)
@@ -665,7 +674,7 @@ class ScheduleQualityReport(APIModel):
 class ValidationReport(APIModel):
     status: ValidationStatus
     public_result: PublicResult
-    validator_version: str = "2.0.0"
+    validator_version: str = "3.0.0"
     messages: list[DomainMessage] = Field(default_factory=list)
     objective: ObjectiveBreakdown | None = None
     legal_profile_status: LegalStatus

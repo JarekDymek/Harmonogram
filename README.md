@@ -33,6 +33,17 @@ pola oznacza API dostępne pod tym samym adresem.
 
 ## Najważniejsze funkcje
 
+Reguła organizacyjna aplikacji wymaga **dokładnie 5 dni pracy w tygodniu
+poniedziałek–niedziela**, a nie samego maksimum 5. Czterodniowy wyjątek nie jest
+włączany automatycznie. Art. 42c Karty Nauczyciela przewiduje pięciodniowy
+tydzień dla pełnego wymiaru oraz określone wyjątki wymagające decyzji dyrektora
+([tekst jednolity 2026, art. 42c](https://api.sejm.gov.pl/eli/acts/DU/2026/515/text.pdf)).
+Ta kontrola i osobisty wzorzec wolnego nie są pełnym audytem prawa: nie
+potwierdzają statusu zatrudnienia, wszystkich warunków wolnych niedziel ani
+profilu prawnego placówki. Wynik walidatora starszego niż 3.0.0 wymaga ponownego
+generowania; przed migracją aplikacja zachowuje osobną lokalną kopię danych i
+poprzedniego wyniku.
+
 - od 1 do 8 grup z osobnymi planami, wyjątkami i wzorcami weekendowymi;
 - globalny rejestr wychowawców i członkostwa `PRIMARY` / `SUPPORT`;
 - usunięcie członkostwa nie wymaga kasowania osoby z rejestru: bez dyżurów
@@ -44,7 +55,11 @@ pola oznacza API dostępne pod tym samym adresem.
 - horyzont 1–6 tygodni, rozpoczynający się w poniedziałek;
 - granice w trybie skończonym albo cyklicznym (cykl tylko dla 6 tygodni);
 - półgodzinowy model czasu i odcinki o długości co najmniej 120 minut;
-- najwyżej pięć kalendarzowych dni pracy każdej osoby w tygodniu, łącznie ze szkołą i nockami;
+- dokładnie pięć kalendarzowych dni pracy każdej osoby objętej planem w tygodniu, łącznie ze szkołą i obiema datami nocki;
+- stały osobisty wzorzec dwóch dni całkowicie wolnych za pracujący weekend (krok 5):
+  obowiązuje w tym samym tygodniu poniedziałek–niedziela we wszystkich grupach;
+  uruchamia go także nocka lub szkoła w sobotę/niedzielę;
+  kolizja wskazuje osobę, datę i wzorzec do poprawy, bez automatycznego usuwania dyżurów;
 - podstawowe i zatwierdzone zastępcze przydziały tygodniowe;
 - plany `BASE_WEEKLY`, `CYCLE_WEEK` i `SPECIFIC_DATE`;
 - dynamiczne zapotrzebowanie jako różnica zbiorów przedziałów;

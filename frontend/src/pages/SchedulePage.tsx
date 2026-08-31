@@ -12,6 +12,7 @@ import {
 } from "../components/UI";
 import { useAppState } from "../state/AppState";
 import { isValidatedPlan } from "../generation";
+import { VALIDATOR_VERSION } from "../workRules";
 import { calendarDuties, fixedNightHours } from "../nightDuties";
 
 function educatorColor(educatorId: string) {
@@ -59,7 +60,7 @@ export function SchedulePage() {
 
   if (!isValidatedPlan(generation)) {
     const hasAttempt = generation !== null;
-    const stale = generation?.validationReport?.status === "VALID" && generation.validationReport.validatorVersion !== "2.0.0";
+    const stale = generation?.validationReport?.status === "VALID" && generation.validationReport.validatorVersion !== VALIDATOR_VERSION;
     const title =
       generation?.publicResult === "NIE_ZAKONCZONO_WYSZUKIWANIA"
         ? "Wyszukiwanie nie zostało zakończone"
@@ -72,7 +73,7 @@ export function SchedulePage() {
           eyebrow="KROK 08 · WYNIK"
           title={stale ? "Przelicz plan według nowych zasad dni pracy" : title}
           description={
-            stale ? "Zachowano dane i kopię poprzedniego wyniku. Nowa kontrola dolicza szkołę oraz obie daty nocki. Kliknij Uruchom generator. Nie trzeba wpisywać danych ponownie." : hasAttempt
+            stale ? "Dane i poprzedni wynik zachowano. Nowa kontrola wymaga dokładnie 5 dni pracy łącznie ze szkołą i obiema datami nocki oraz przestrzegania zapisanego wolnego za weekend. Kliknij Uruchom generator. Nie trzeba wpisywać danych ponownie." : hasAttempt
               ? "Nie masz jeszcze sprawdzonego planu. Brak wyniku nie oznacza błędu godzin — poniżej podajemy rzeczywistą przyczynę."
               : "Aplikacja najpierw ułoży propozycję spełniającą wymagane warunki, a następnie niezależnie ją sprawdzi."
           }

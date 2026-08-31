@@ -420,7 +420,7 @@ def solve_schedule(
             day_indexes = range(week_index * 7, (week_index + 1) * 7)
             model.add(
                 sum(works_day[(educator_index, day)] for day in day_indexes)
-                <= configuration.organizational_rules.required_work_days_per_week
+                == configuration.organizational_rules.required_work_days_per_week
             )
             required_minutes = _assigned_minutes(
                 configuration,

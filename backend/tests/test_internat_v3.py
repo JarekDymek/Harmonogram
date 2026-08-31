@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from zoneinfo import ZoneInfo
+import pytest
+from app.domain.work_calendar import duty_dates
 
 from app.domain import rules
 from app.fixtures.demo import demo_configuration
@@ -315,7 +317,8 @@ def test_solver_respects_cross_midnight_night_duty():
     )
 
 
-def test_cross_midnight_night_counts_both_workdays_and_keeps_local_time():
+@pytest.mark.parametrize("night_person_hours, expected_status", [(20, "CANDIDATE_FOUND"), (22, "NO_SOLUTION")])
+def test_cross_midnight_night_counts_both_workdays_and_keeps_local_time(night_person_hours, expected_status):
     configuration = demo_configuration()
     configuration.solver_time_limit_seconds = 10
     configuration.educators.append(
@@ -326,7 +329,9 @@ def test_cross_midnight_night_counts_both_workdays_and_keeps_local_time():
             base_weekly_assigned_minutes=1320,
         )
     )
-    targets = {"A": 22, "B": 22, "C": 16, "D": 22}
+    # With the original 22/16 split only the former <=5-day policy could fit
+    # this synthetic night/rest calendar. It must not pass the new exact rule.
+    targets = {"A": 22, "B": night_person_hours, "C": 38 - night_person_hours, "D": 22}
     configuration.group_memberships = [
         GroupEducatorMembership(
             id=f"MEM-G1-{educator_id}",
@@ -377,9 +382,18 @@ def test_cross_midnight_night_counts_both_workdays_and_keeps_local_time():
 
     response = generate_schedule(configuration)
 
-    assert response.generation_status == "CANDIDATE_FOUND"
+    assert response.generation_status == expected_status
+    if expected_status == "NO_SOLUTION":
+        assert response.assignments == []
+        return
     assert response.validation_report is not None
     assert response.validation_report.status == "VALID"
+    for educator in configuration.educators:
+        dates = {a.date for a in response.assignments if a.educator_id == educator.id}
+        for duty in configuration.external_duty_assignments:
+            if duty.educator_id == educator.id:
+                dates.update(duty_dates(configuration, duty))
+        assert len(dates) == 5
 
 
 def test_legacy_single_group_payload_is_migrated_without_data_loss():

@@ -10,6 +10,7 @@ import {
 } from "react";
 import { api, type GenerationOptions } from "../api";
 import { migrateWorkCalendar } from "../nightDuties";
+import { WORK_RULES_VERSION } from "../workRules";
 import { isBetterPlan, isValidatedPlan } from "../generation";
 import type {
   GenerateResponse,
@@ -181,9 +182,9 @@ function restoreInitialConfiguration(): {
   for (const key of [STORAGE_KEY, V2_STORAGE_KEY, LEGACY_STORAGE_KEY]) {
     const stored = restore<Partial<ScheduleConfiguration>>(key);
     if (stored) {
-      if (stored.workRulesVersion !== 2) {
+      if (stored.workRulesVersion !== WORK_RULES_VERSION) {
         // A migration never overwrites the only copy of local user data.
-        const backupKey = `${STORAGE_KEY}-before-work-calendar-${stored.projectId ?? "legacy"}`;
+        const backupKey = `${STORAGE_KEY}-before-work-calendar-v${WORK_RULES_VERSION}-${stored.projectId ?? "legacy"}`;
         try {
           if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, JSON.stringify({
             configuration: stored, generation: restore(GENERATION_KEY), savedAt: new Date().toISOString(),
@@ -200,7 +201,7 @@ function restoreInitialConfiguration(): {
       return {
         configuration: migrateConfiguration(stored),
         migrationPending: pending,
-        workRulesUpdated: stored.workRulesVersion !== 2,
+        workRulesUpdated: stored.workRulesVersion !== WORK_RULES_VERSION,
       };
     }
   }

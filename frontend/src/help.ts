@@ -233,11 +233,22 @@ export function getRuleGuidance(
   configuration?: ScheduleConfiguration,
 ): RuleGuidance {
   const ruleId = message.ruleId;
+  if (ruleId === "REQ-WEEKEND-DAYS-OFF-001") {
+    const patternId = contextString(message, "patternId");
+    const groupId = configuration?.groupMemberships.find(m => m.active && m.educatorId === message.educatorId)?.groupId;
+    return {
+      title: "Popraw stałe dni wolne za weekend",
+      explanation: message.message,
+      destination: "Weekendy → dwa dni wolne przy pracującym weekendzie",
+      actionLabel: "Przejdź do wzorca wolnego",
+      actionTo: `/weekendy${groupId ? `?grupa=${encodeURIComponent(groupId)}` : ""}#${patternId ? `wolne-${anchor(patternId)}` : "wolne-za-weekend"}`,
+    };
+  }
   if (["REQ-REQUIRED-DUTY-001", "REQ-NIGHT-WINDOW-001", "REQ-WORK-CALENDAR-001", "REQ-DAYS-001"].includes(ruleId)) {
     const timeLimit = contextString(message, "limitKind");
     const section = ruleId === "REQ-REQUIRED-DUTY-001" || timeLimit === "continuous" ? "stale-dyzury" : ruleId === "REQ-NIGHT-WINDOW-001" && message.groupId !== "EXTERNAL" ? "nocki" : "szkola";
     return {
-      title: timeLimit ? "Skróć łączny czas dyżuru" : ruleId === "REQ-REQUIRED-DUTY-001" ? "Popraw obowiązkowy dyżur" : ruleId === "REQ-NIGHT-WINDOW-001" ? "Popraw pracę obok nocki" : "Pozostaw dwa całkowicie wolne dni",
+      title: timeLimit ? "Skróć łączny czas dyżuru" : ruleId === "REQ-REQUIRED-DUTY-001" ? "Popraw obowiązkowy dyżur" : ruleId === "REQ-NIGHT-WINDOW-001" ? "Popraw pracę obok nocki" : "Zaplanuj pięć dni pracy i dwa dni wolne",
       explanation: message.message,
       destination: "Wychowawcy → " + (section === "szkola" ? "szkoła i obowiązkowe dyżury" : section === "nocki" ? "nocki" : "obowiązkowe dyżury"),
       actionLabel: "Przejdź do wskazanych wpisów",
