@@ -162,6 +162,28 @@ describe("główny przepływ interfejsu", () => {
     expect(screen.queryByText("Minuty tygodniowo")).not.toBeInTheDocument();
   });
 
+  it("usuwa czwarte członkostwo, zachowuje rejestr i unieważnia poprzedni wynik", async () => {
+    const config = structuredClone(configurationFixture);
+    config.educatorCount = 4;
+    config.educators.push({...config.educators[0], id: "D", displayName: "Czwarta osoba", shortCode: "D"});
+    config.groupMemberships.push({...config.groupMemberships[0], id: "MEM-D", educatorId: "D", role: "SUPPORT"});
+    localStorage.setItem("harmonogram-mow-configuration-v3", JSON.stringify(config));
+    localStorage.setItem("harmonogram-mow-generation-v3", JSON.stringify({generationStatus: "TIME_LIMIT", publicResult: "NIE_ZAKONCZONO_WYSZUKIWANIA", assignments: [], care: [], messages: []}));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    renderApp("/wychowawcy");
+    await user.click(screen.getAllByText("Więcej ustawień osoby")[3]);
+    await user.click(screen.getAllByRole("button", {name: "Usuń z tej grupy"})[3]);
+    expect(screen.getByRole("heading", {name: "Godziny opieki · 3 osoby"})).toBeVisible();
+    const saved = JSON.parse(localStorage.getItem("harmonogram-mow-configuration-v3")!);
+    expect(saved.educatorCount).toBe(3);
+    expect(saved.groupMemberships.map((m: {educatorId: string}) => m.educatorId)).toEqual(["A", "B", "C"]);
+    expect(saved.educators).toHaveLength(4);
+    expect(saved.educators.find((e: {id: string}) => e.id === "D").displayName).toBe("Czwarta osoba");
+    expect(localStorage.getItem("harmonogram-mow-generation-v3")).toBeNull();
+    expect(screen.getByText(/Osoba pozostająca tylko w rejestrze/)).toBeVisible();
+  });
+
   it("zaznacza dokładny tydzień i mówi, o ile zmienić sumę godzin", () => {
     localStorage.setItem(
       "harmonogram-mow-configuration-v3",
