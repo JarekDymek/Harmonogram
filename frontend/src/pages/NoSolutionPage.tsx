@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { EmptyState, MessagesTable, PageHeader, StatusBadge } from "../components/UI";
+import { RepairGuide } from "../components/RepairGuide";
 import { useAppState } from "../state/AppState";
 
 export function NoSolutionPage() {
@@ -12,6 +13,11 @@ export function NoSolutionPage() {
       </EmptyState>
     );
   }
+  const messages = generation?.messages ?? [];
+  const errors = messages.filter((message) => message.severity === "ERROR");
+  const remainingMessages = messages.filter(
+    (message) => message.severity !== "ERROR",
+  );
   return (
     <>
       <PageHeader
@@ -19,28 +25,38 @@ export function NoSolutionPage() {
         title="Nie udało się jeszcze ułożyć planu"
         description="Nie zmieniaj wszystkich danych. Zacznij od pierwszej konkretnej wskazówki poniżej."
       />
-      <section className="next-step-card next-step-card--error">
-        <div>
-          <span className="eyebrow">CO ZROBIĆ TERAZ</span>
-          <h2>Zacznij od pierwszej wskazanej pozycji</h2>
-          <p>{conflict.summary}</p>
-        </div>
-        <Link className="button button--secondary" to="/podsumowanie">
-          Sprawdź dane ponownie
-        </Link>
-      </section>
-      <section className="section-block">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">KONKRETNE WSKAZÓWKI</span>
-            <h2>Co blokuje plan</h2>
-          </div>
-        </div>
-        <MessagesTable
-          messages={generation?.messages ?? []}
+      {errors.length > 0 ? (
+        <RepairGuide
+          messages={errors}
           configuration={configuration ?? undefined}
+          recheckTo="/podsumowanie"
         />
-      </section>
+      ) : (
+        <section className="next-step-card next-step-card--error">
+          <div>
+            <span className="eyebrow">CO ZROBIĆ TERAZ</span>
+            <h2>Sprawdź ograniczenia planu</h2>
+            <p>{conflict.summary}</p>
+          </div>
+          <Link className="button button--secondary" to="/podsumowanie">
+            Wróć do sprawdzenia danych
+          </Link>
+        </section>
+      )}
+      {remainingMessages.length > 0 && (
+        <section className="section-block">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">DODATKOWE INFORMACJE</span>
+              <h2>Co jeszcze warto sprawdzić</h2>
+            </div>
+          </div>
+          <MessagesTable
+            messages={remainingMessages}
+            configuration={configuration ?? undefined}
+          />
+        </section>
+      )}
       <details className="section-block summary-details">
         <summary>
           <span>

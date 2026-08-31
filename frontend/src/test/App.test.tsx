@@ -311,6 +311,10 @@ describe("główny przepływ interfejsu", () => {
         name: /Nocka Wychowawca B koliduje z pracą w weekend/i,
       }),
     ).toBeVisible();
+    expect(screen.getByText("Krok 1 z 1")).toBeVisible();
+    expect(screen.getByLabelText("Proponowane sposoby naprawy")).toHaveTextContent(
+      "Opcja 2",
+    );
     expect(
       screen.getAllByRole("link", { name: "Zmień dzienny dyżur weekendowy" })[0],
     ).toHaveAttribute("href", "/weekendy#weekend-pozycja-1");

@@ -1,6 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+import userEvent from "@testing-library/user-event";
+import { RepairGuide } from "../components/RepairGuide";
 import { MessagesTable, Timeline } from "../components/UI";
 
 describe("komponenty raportowe", () => {
@@ -74,5 +76,54 @@ describe("komponenty raportowe", () => {
     expect(
       screen.getByRole("link", { name: "Przejdź do tego weekendu" }),
     ).toHaveAttribute("href", "/weekendy#weekend-pozycja-3");
+  });
+
+  it("prowadzi krok po kroku przez problemy i pokazuje warianty naprawy", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <RepairGuide
+          messages={[
+            {
+              ruleId: "REQ-CROSS-GROUP-REST-001",
+              severity: "ERROR",
+              message: "Nocka koliduje z dyżurem weekendowym.",
+              context: {
+                conflictType: "NIGHT_WEEKEND_REST",
+                position: 1,
+              },
+            },
+            {
+              ruleId: "REQ-HOURS-001",
+              severity: "ERROR",
+              message: "W tygodniu 2 brakuje godzin.",
+              context: {
+                weekNumber: 2,
+                requiredMinutes: 6000,
+                assignedMinutes: 5880,
+                differenceMinutes: -120,
+              },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Krok 1 z 2")).toBeVisible();
+    expect(screen.getByLabelText("Proponowane sposoby naprawy")).toHaveTextContent(
+      "Opcja 2",
+    );
+    expect(screen.getByRole("link", { name: "Zmień lub usuń nockę" })).toHaveAttribute(
+      "href",
+      "/wychowawcy#nocki",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Następny problem" }));
+
+    expect(screen.getByText("Krok 2 z 2")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "W tygodniu 2 brakuje 2 godz." }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Następny problem" })).toBeDisabled();
   });
 });

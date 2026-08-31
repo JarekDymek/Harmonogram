@@ -2540,6 +2540,128 @@ input[readonly] {
   color: #7b2e2a;
 }
 
+.repair-guide {
+  margin: 0 0 24px;
+  padding: 24px;
+  border: 1px solid #c95a50;
+  border-radius: 9px;
+  background: #fff7f5;
+}
+
+.repair-guide__header,
+.repair-guide__footer,
+.repair-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.repair-guide__progress-label {
+  margin: 5px 0 0;
+  color: #7b2e2a;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.repair-guide progress {
+  width: min(300px, 42%);
+  height: 10px;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #ead7d3;
+}
+
+.repair-guide progress::-webkit-progress-bar {
+  background: #ead7d3;
+}
+
+.repair-guide progress::-webkit-progress-value {
+  background: #b43f36;
+}
+
+.repair-guide progress::-moz-progress-bar {
+  background: #b43f36;
+}
+
+.repair-guide__problem {
+  margin-top: 18px;
+}
+
+.repair-guide__problem h2 {
+  margin: 0 0 7px;
+  font-family: Georgia, serif;
+  font-size: 1.55rem;
+  font-weight: 500;
+}
+
+.repair-guide__problem p,
+.repair-option p,
+.repair-guide__safety-note {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.repair-guide__options {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.repair-option {
+  padding: 16px;
+  border: 1px solid #e5c4be;
+  border-radius: 7px;
+  background: white;
+}
+
+.repair-option__number {
+  color: #9b342d;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.repair-option h3 {
+  margin: 4px 0;
+  font-size: 0.95rem;
+}
+
+.repair-option .repair-option__destination {
+  margin-top: 7px;
+  color: var(--ink);
+  font-size: 0.74rem;
+}
+
+.repair-option .button {
+  flex: 0 0 auto;
+}
+
+.repair-guide__safety-note {
+  margin-top: 15px;
+  padding: 11px 13px;
+  border-left: 4px solid #d9b45b;
+  background: var(--gold-soft);
+  color: #69531e;
+}
+
+.repair-guide__footer {
+  margin-top: 16px;
+}
+
+.repair-guide__navigation {
+  display: flex;
+  gap: 8px;
+}
+
+.repair-guide__details {
+  margin-top: 14px;
+}
+
 .message-list {
   display: grid;
   gap: 12px;
@@ -2805,13 +2927,28 @@ input[readonly] {
   }
 
   .next-step-card,
-  .message-card {
+  .message-card,
+  .repair-option {
     align-items: stretch;
     grid-template-columns: 1fr;
   }
 
   .next-step-card {
     flex-direction: column;
+  }
+
+  .repair-option {
+    flex-direction: column;
+  }
+
+  .repair-guide__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .repair-option .button,
+  .repair-guide__footer > .button {
+    width: 100%;
   }
 
   .next-step-card .button,
@@ -2841,6 +2978,24 @@ input[readonly] {
 
   .message-card__heading {
     display: grid;
+  }
+
+  .repair-guide {
+    padding: 18px;
+  }
+
+  .repair-guide__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .repair-guide progress {
+    width: 100%;
+  }
+
+  .repair-guide__navigation {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   .message-card__context,
