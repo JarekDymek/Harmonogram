@@ -19,6 +19,13 @@ export interface RuleGuidance {
   actionTo: string;
 }
 
+export interface RepairOption {
+  label: string;
+  description: string;
+  destination: string;
+  actionTo: string;
+}
+
 const pageHelp: Record<string, PageHelp> = {
   "/": {
     title: "Jak zacząć",
@@ -468,4 +475,55 @@ export function getRuleGuidance(
     actionLabel: "Wróć do podsumowania",
     actionTo: "/podsumowanie",
   };
+}
+
+export function getRepairOptions(
+  message: DomainMessage,
+  configuration?: ScheduleConfiguration,
+): RepairOption[] {
+  const guidance = getRuleGuidance(message, configuration);
+  const primary: RepairOption = {
+    label: guidance.actionLabel,
+    description:
+      "Popraw tylko wskazane miejsce. Pozostałe nazwiska, godziny, nocki i dostępności pozostaną bez zmian.",
+    destination: guidance.destination,
+    actionTo: guidance.actionTo,
+  };
+  const conflictType = contextString(message, "conflictType");
+
+  if (conflictType === "NIGHT_WEEKEND_REST") {
+    return [
+      {
+        ...primary,
+        description:
+          "Zmień osobę albo godziny dziennego dyżuru w tej pozycji weekendu, aby zachować odpoczynek po nocce.",
+      },
+      {
+        label: "Zmień lub usuń nockę",
+        description:
+          "Wybierz tę możliwość tylko wtedy, gdy stała nocka została wpisana omyłkowo albo w tym planie ma obowiązywać inna osoba.",
+        destination: "Wychowawcy → nocki stałe i dodatkowe",
+        actionTo: "/wychowawcy#nocki",
+      },
+    ];
+  }
+
+  if (conflictType === "HARD_UNAVAILABILITY_WEEKEND") {
+    return [
+      {
+        ...primary,
+        description:
+          "Przydziel ten dyżur innej dostępnej osobie w dokładnie wskazanej pozycji weekendu.",
+      },
+      {
+        label: "Sprawdź wpisaną niedostępność",
+        description:
+          "Wybierz tę możliwość tylko wtedy, gdy zakaz pracy został wpisany błędnie lub ma niewłaściwe godziny.",
+        destination: "Wychowawcy → niedostępność wychowawcy",
+        actionTo: "/wychowawcy#dostepnosc",
+      },
+    ];
+  }
+
+  return [primary];
 }

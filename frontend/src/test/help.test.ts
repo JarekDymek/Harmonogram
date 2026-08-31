@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPageHelp, getRuleGuidance } from "../help";
+import { getPageHelp, getRepairOptions, getRuleGuidance } from "../help";
 import type { DomainMessage } from "../types";
 
 function message(
@@ -129,6 +129,21 @@ describe("pomoc kontekstowa", () => {
     expect(guidance.actionTo).toBe("/weekendy#weekend-pozycja-2");
   });
 
+  it("proponuje dwa bezpieczne sposoby naprawy konfliktu nocki", () => {
+    const nightMessage = message("REQ-CROSS-GROUP-REST-001");
+    nightMessage.context = {
+      conflictType: "NIGHT_WEEKEND_REST",
+      position: 2,
+    };
+
+    const options = getRepairOptions(nightMessage);
+
+    expect(options).toHaveLength(2);
+    expect(options[0].actionTo).toBe("/weekendy#weekend-pozycja-2");
+    expect(options[1].actionTo).toBe("/wychowawcy#nocki");
+    expect(options[1].description).toContain("wpisana omyłkowo");
+  });
+
   it("prowadzi konflikt niedostępności do dokładnej pozycji weekendowej", () => {
     const unavailableMessage = message("REQ-UNAVAILABLE-HARD-001");
     unavailableMessage.context = {
@@ -140,6 +155,21 @@ describe("pomoc kontekstowa", () => {
 
     expect(guidance.actionTo).toBe("/weekendy#weekend-pozycja-5");
     expect(guidance.destination).toBe("Weekendy → pozycja 5");
+  });
+
+  it("pozwala poprawić weekend albo błędnie wpisaną niedostępność", () => {
+    const unavailableMessage = message("REQ-UNAVAILABLE-HARD-001");
+    unavailableMessage.context = {
+      conflictType: "HARD_UNAVAILABILITY_WEEKEND",
+      position: 5,
+    };
+
+    const options = getRepairOptions(unavailableMessage);
+
+    expect(options.map((option) => option.actionTo)).toEqual([
+      "/weekendy#weekend-pozycja-5",
+      "/wychowawcy#dostepnosc",
+    ]);
   });
 
   it("ma instrukcję dla każdego głównego kroku", () => {

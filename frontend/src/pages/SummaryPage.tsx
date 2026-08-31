@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { getRuleGuidance } from "../help";
+import { RepairGuide } from "../components/RepairGuide";
 import {
   DemoNotice,
   EmptyState,
@@ -27,12 +27,9 @@ export function SummaryPage() {
     configuration.selectedGroupIds.length;
   const errors =
     inputReport?.messages.filter((item) => item.severity === "ERROR") ?? [];
-  const firstGuidance = errors[0]
-    ? getRuleGuidance(errors[0], configuration)
-    : null;
   const remainingMessages = inputReport?.messages.filter(
     (item) =>
-      item !== errors[0] &&
+      item.severity !== "ERROR" &&
       !(
         item.ruleId === "REQ-HOURS-001" &&
         typeof item.context.weekNumber === "number" &&
@@ -108,25 +105,13 @@ export function SummaryPage() {
               </strong>
             </div>
           </section>
-          {firstGuidance && (
-            <section className="next-step-card next-step-card--error" aria-labelledby="next-step-title">
-              <div>
-                <span className="eyebrow">CO ZROBIĆ TERAZ</span>
-                <h2 id="next-step-title">{firstGuidance.title}</h2>
-                <p>{firstGuidance.explanation}</p>
-                <p className="next-step-card__destination">
-                  <strong>Miejsce do poprawy:</strong> {firstGuidance.destination}
-                </p>
-                <p className="next-step-card__count">
-                  Wykryto {errors.length} {errors.length === 1 ? "błąd" : "błędy"}.
-                  Zacznij od pierwszej wskazanej pozycji, a następnie ponownie
-                  sprawdź dane.
-                </p>
-              </div>
-              <Link className="button button--primary" to={firstGuidance.actionTo}>
-                {firstGuidance.actionLabel}
-              </Link>
-            </section>
+          {errors.length > 0 && (
+            <RepairGuide
+              messages={errors}
+              configuration={configuration}
+              busy={busy}
+              onRecheck={() => void validateInput()}
+            />
           )}
           <section className="section-block">
             <div className="section-heading">
@@ -214,8 +199,8 @@ export function SummaryPage() {
             <section className="section-block">
               <div className="section-heading">
                 <div>
-                  <span className="eyebrow">POZOSTAŁE RZECZY DO POPRAWY</span>
-                  <h2>Proste wskazówki</h2>
+                  <span className="eyebrow">NIE BLOKUJĄ GENEROWANIA</span>
+                  <h2>Ostrzeżenia i informacje</h2>
                 </div>
               </div>
               <MessagesTable
