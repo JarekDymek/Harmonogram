@@ -783,6 +783,14 @@ def _weekly_rest_messages(
         if not educator.active:
             continue
         work = _merged_utc_work(configuration, assignments, educator.id)
+        # A registry entry without any work has no rest deficit. In a cyclic
+        # horizon there are no neighbouring shifts from which to construct
+        # free periods; treating that empty list as zero rest rejects valid
+        # plans after removing a membership. Required hours/coverage are
+        # checked separately, and any real school/night/other-group duty is
+        # already included in `assignments` by the global validator.
+        if not work:
+            continue
         free_periods = _global_free_periods(
             work,
             boundary_start=None if cyclic else horizon_start,

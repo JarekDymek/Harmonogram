@@ -35,6 +35,8 @@ pola oznacza API dostępne pod tym samym adresem.
 
 - od 1 do 8 grup z osobnymi planami, wyjątkami i wzorcami weekendowymi;
 - globalny rejestr wychowawców i członkostwa `PRIMARY` / `SUPPORT`;
+- usunięcie członkostwa nie wymaga kasowania osoby z rejestru: bez dyżurów
+  nie generuje ona błędu odpoczynku; rzeczywiste dyżury poza grupą nadal podlegają kontroli;
 - jedna osoba może pracować w kilku grupach, ale nigdy jednocześnie;
 - globalne liczenie odpoczynków, dni pracy, niedostępności i godzin;
 - osobny widok aktywnej grupy i tabelaryczny widok całego internatu;

@@ -442,10 +442,13 @@ export function EducatorsPage() {
           })}
         </div>
         {memberships.length < 4 && (
-          <div className="inline-form">
-            <label>Osoba z rejestru<select value={selectedEducatorId} onChange={(event) => setSelectedEducatorId(event.target.value)}><option value="">Wybierz</option>{available.map((item) => <option key={item.id} value={item.id}>{item.displayName} · {item.shortCode}</option>)}</select></label>
-            <button className="button button--secondary" type="button" disabled={!available.length} onClick={addMembership}>Dodaj do grupy</button>
-          </div>
+          <>
+            <p>Osoba pozostająca tylko w rejestrze, bez członkostwa ani dyżurów, nie jest wymagana do wygenerowania planu. Jej danych nie trzeba kasować.</p>
+            <div className="inline-form">
+              <label>Osoba z rejestru<select value={selectedEducatorId} onChange={(event) => setSelectedEducatorId(event.target.value)}><option value="">Wybierz</option>{available.map((item) => <option key={item.id} value={item.id}>{item.displayName} · {item.shortCode}</option>)}</select></label>
+              <button className="button button--secondary" type="button" disabled={!available.length} onClick={addMembership}>Dodaj do grupy</button>
+            </div>
+          </>
         )}
       </section>
 
