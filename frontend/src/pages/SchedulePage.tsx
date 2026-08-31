@@ -11,6 +11,7 @@ import {
   minutesToTime,
 } from "../components/UI";
 import { useAppState } from "../state/AppState";
+import { isValidatedPlan } from "../generation";
 
 function educatorColor(educatorId: string) {
   let hash = 0;
@@ -22,7 +23,7 @@ function educatorColor(educatorId: string) {
 
 export function SchedulePage() {
   const navigate = useNavigate();
-  const { configuration, generation, generate, busy } = useAppState();
+  const { configuration, generation, generationNotice, generate, busy } = useAppState();
   const [week, setWeek] = useState(1);
   const [view, setView] = useState<"week" | "educator">("week");
   useEffect(() => {
@@ -47,13 +48,15 @@ export function SchedulePage() {
   if (!configuration) return <EmptyState>Najpierw utwórz konfigurację.</EmptyState>;
 
   const run = async () => {
-    const result = await generate();
+    const result = await generate({
+      timeLimitSeconds: generation?.generationStatus === "TIME_LIMIT" ? 180 : 60,
+    });
     if (result?.publicResult === "BRAK_ROZWIAZANIA") {
       navigate("/brak-rozwiazania");
     }
   };
 
-  if (!generation || !generation.assignments.length) {
+  if (!isValidatedPlan(generation)) {
     const hasAttempt = generation !== null;
     const title =
       generation?.publicResult === "NIE_ZAKONCZONO_WYSZUKIWANIA"
@@ -68,8 +71,8 @@ export function SchedulePage() {
           title={title}
           description={
             hasAttempt
-              ? "Aplikacja nie publikuje kandydata po limicie czasu ani wyniku odrzuconego przez niezależny walidator."
-              : "Solver opublikuje wynik dopiero po przejściu niezależnej walidacji."
+              ? "Nie masz jeszcze sprawdzonego planu. Brak wyniku nie oznacza błędu godzin — poniżej podajemy rzeczywistą przyczynę."
+              : "Aplikacja najpierw ułoży propozycję spełniającą wymagane warunki, a następnie niezależnie ją sprawdzi."
           }
         />
         {generation && (
@@ -86,9 +89,9 @@ export function SchedulePage() {
         )}
         <section className="empty-state">
           <span aria-hidden="true">▦</span>
-          <h2>Gotowy do uruchomienia</h2>
+          <h2>{generation?.generationStatus === "TIME_LIMIT" ? "Potrzebna jest dłuższa próba obliczeń" : "Ułóż propozycję planu"}</h2>
           <p>
-            Wróć do podsumowania i sprawdź dane albo uruchom generator teraz.
+            Nie musisz ponownie wpisywać danych. Poprawny plan pojawi się bez czekania na idealny podział preferencji.
           </p>
           <button
             className="button button--primary"
@@ -96,12 +99,12 @@ export function SchedulePage() {
             disabled={busy}
             onClick={() => void run()}
           >
-            {busy ? "Solver pracuje…" : "Uruchom generator"}
+            {busy ? "Układam i sprawdzam plan…" : generation?.generationStatus === "TIME_LIMIT" ? "Szukaj dłużej" : "Uruchom generator"}
           </button>
         </section>
         {generation?.messages.length ? (
           <section className="section-block">
-            <MessagesTable messages={generation.messages} />
+            <MessagesTable messages={generation.messages} configuration={configuration} />
           </section>
         ) : null}
       </>
@@ -172,6 +175,17 @@ export function SchedulePage() {
           {generation.validationReport?.demonstrationUseProhibitedNotice}
         </DemoNotice>
       )}
+      <section className="next-step-card" aria-label="Poprawna propozycja planu">
+        <div>
+          <h2>Propozycja planu jest gotowa i sprawdzona</h2>
+          <p>Wymagane godziny, dostępność, nocki i odpoczynki przeszły kontrolę. Niżej zobaczysz, które dni można jeszcze wygodniej podzielić. Ulepszanie jest opcjonalne i nie usuwa gotowego planu.</p>
+          {generationNotice && <p role="status">{generationNotice}</p>}
+        </div>
+        <button className="button button--secondary" type="button" disabled={busy}
+          onClick={() => void generate({ optimize: true })}>
+          {busy ? "Szukam lepszego układu…" : "Spróbuj ulepszyć podział"}
+        </button>
+      </section>
       <section className="result-bar">
         <div>
           <small>Wynik publiczny</small>
@@ -182,20 +196,20 @@ export function SchedulePage() {
           <strong>{generation.assignments.length}</strong>
         </div>
         <div>
-          <small>Wynik preferencji</small>
-          <strong>{generation.objective?.objectiveScore ?? "—"}</strong>
+          <small>Kontrola wymaganych warunków</small>
+          <strong>ZALICZONA</strong>
         </div>
         <div>
           <small>Następna pozycja weekendu</small>
           <strong>{generation.nextWeekendVariant ?? "—"}</strong>
         </div>
         <div>
-          <small>Optymalność celu</small>
+          <small>Układ planu</small>
           <StatusBadge
             value={
               generation.optimizationProven
-                ? "UDOWODNIONA"
-                : "NAJLEPSZA ZNALEZIONA"
+                ? "NAJLEPSZY POTWIERDZONY"
+                : "POPRAWNA PROPOZYCJA"
             }
           />
         </div>
@@ -349,7 +363,8 @@ export function SchedulePage() {
       )}
 
       {generation.objective && (
-        <section className="section-block">
+        <details className="section-block">
+          <summary>Techniczne szczegóły oceny układu (opcjonalne)</summary>
           <div className="section-heading">
             <div>
               <span className="eyebrow">FUNKCJA CELU</span>
@@ -367,12 +382,12 @@ export function SchedulePage() {
             <div><span>Długie odcinki</span><strong>{generation.objective.longSegmentsPenalty}</strong></div>
             <div><span>PREFERRED</span><strong>{generation.objective.preferredUnavailabilityPenalty}</strong></div>
           </div>
-        </section>
+        </details>
       )}
 
       {generation.qualityReport?.weeks.find((item) => item.weekNumber === week) && (
         <section className="section-block">
-          <div className="section-heading"><div><span className="eyebrow">RAPORT JAKOŚCI</span><h2>Podziały ciągłych bloków</h2></div></div>
+          <div className="section-heading"><div><span className="eyebrow">OPCJONALNE ULEPSZENIA</span><h2>Gdzie można szukać wygodniejszego podziału</h2><p>To nie są błędy planu. Przycisk „Spróbuj ulepszyć podział” poszuka układu z mniejszą liczbą przerw i zmian osób. Zachowanie wszystkich wymaganych warunków ma pierwszeństwo.</p></div></div>
           {(() => {
             const quality = generation.qualityReport!.weeks.find((item) => item.weekNumber === week)!;
             return (

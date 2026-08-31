@@ -4,7 +4,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import timedelta
 from math import ceil
-from time import monotonic
 
 from ortools.sat.python import cp_model
 
@@ -28,6 +27,7 @@ from app.services.time_utils import (
 )
 from app.services.weekend import selected_weekend_variant, template_tuples
 from app.solver.schedule_solver import _add_weekly_rest
+from app.solver.search import first_feasible, generation_status
 
 
 @dataclass(slots=True)
@@ -163,6 +163,8 @@ def _canonical_merge(assignments: list[WorkAssignment]) -> list[WorkAssignment]:
 def solve_internat_schedule(
     configuration: ScheduleConfiguration,
     care: list[CalculatedCareDay],
+    *,
+    optimize: bool = False,
 ) -> InternatSolverResult:
     """Wspólny model CP-SAT dla wszystkich wybranych grup internatu."""
     model = cp_model.CpModel()
@@ -249,6 +251,7 @@ def solve_internat_schedule(
 
     global_x: dict[tuple[int, int, int], cp_model.IntVar] = {}
     occupied_x: dict[tuple[int, int, int], cp_model.IntVar] = {}
+    fixed_slots: set[tuple[int, int, int]] = set()
     for index, educator in enumerate(educators):
         for day_index, target_date in enumerate(dates):
             for slot in range(rules.SLOTS_PER_DAY):
@@ -268,6 +271,7 @@ def solve_internat_schedule(
                     target_date,
                     slot,
                 ):
+                    fixed_slots.add((index, day_index, slot))
                     model.add(global_value == 0)
                     model.add(occupied == 1)
                 else:
@@ -317,12 +321,19 @@ def solve_internat_schedule(
                             model.add(values[position + offset] >= start)
                     # Najwyżej jeden początek osoby w maksymalnym bloku popytu.
                     model.add(sum(starts_in_block) <= 1)
+                    maximum_segment = configuration.legal_rules.maximum_absolute_segment_minutes
+                    if maximum_segment is not None:
+                        # At most one contiguous segment per person in this block.
+                        model.add(sum(values) * step <= maximum_segment)
                     used = model.new_bool_var(
                         f"used_{group_id}_{index}_{day_index}_{block_index}"
                     )
                     model.add_max_equality(used, values)
                     used_terms.append(used)
                 distinct_terms.append(sum(used_terms) - 1)
+
+                if not optimize:
+                    continue
 
                 for position in range(1, len(slots)):
                     boundary_slot = slots[position]
@@ -440,7 +451,7 @@ def solve_internat_schedule(
                 model.add(work_day == 1)
             else:
                 model.add_max_equality(work_day, values)
-            for slot, current in enumerate(values):
+            for slot, current in enumerate(values if optimize else []):
                 previous = values[slot - 1] if slot else 0
                 start = model.new_bool_var(f"global_start_{index}_{day_index}_{slot}")
                 model.add(start >= current - previous)
@@ -487,36 +498,26 @@ def solve_internat_schedule(
     # Odpoczynki liczone globalnie, razem z dyżurami i blokadami.
     minimum_daily_rest = configuration.legal_rules.minimum_daily_rest_minutes
     transition_count = total_days if cyclic else total_days - 1
-    for index in range(len(educators)):
-        for day_index in range(transition_count):
-            next_day_index = (day_index + 1) % total_days
-            next_date = (
-                dates[next_day_index]
-                if next_day_index
-                else configuration.cycle_start_date + timedelta(days=total_days)
-            )
-            for current_slot in range(rules.SLOTS_PER_DAY):
-                for next_slot in range(rules.SLOTS_PER_DAY):
-                    rest = elapsed_minutes(
-                        dates[day_index],
-                        (current_slot + 1) * step,
-                        next_date,
-                        next_slot * step,
-                        configuration.time_zone_id,
-                    )
-                    if rest < minimum_daily_rest:
-                        current_fixed = _fixed_occupancy(
-                            configuration,
-                            educators[index].id,
-                            dates[day_index],
-                            current_slot,
-                        )
-                        next_fixed = _fixed_occupancy(
-                            configuration,
-                            educators[index].id,
-                            dates[next_day_index],
-                            next_slot,
-                        )
+    for day_index in range(transition_count):
+        next_day_index = (day_index + 1) % total_days
+        next_date = (
+            dates[next_day_index]
+            if next_day_index
+            else configuration.cycle_start_date + timedelta(days=total_days)
+        )
+        for current_slot in range(rules.SLOTS_PER_DAY):
+            for next_slot in range(rules.SLOTS_PER_DAY):
+                rest = elapsed_minutes(
+                    dates[day_index],
+                    (current_slot + 1) * step,
+                    next_date,
+                    next_slot * step,
+                    configuration.time_zone_id,
+                )
+                if rest < minimum_daily_rest:
+                    for index in range(len(educators)):
+                        current_fixed = (index, day_index, current_slot) in fixed_slots
+                        next_fixed = (index, next_day_index, next_slot) in fixed_slots
                         if current_fixed and next_fixed:
                             continue
                         model.add(
@@ -545,6 +546,39 @@ def solve_internat_schedule(
                     * step
                     <= maximum_daily
                 )
+
+    if not optimize:
+        model.add_decision_strategy(list(group_starts.values()), cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
+        model.add_decision_strategy(list(x.values()), cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
+        solver, status = first_feasible(model, configuration)
+        result_status = generation_status(status)
+        assignments = []
+        if result_status == GenerationStatus.CANDIDATE_FOUND:
+            for group_id in group_ids:
+                for membership in group_members[group_id]:
+                    index = educator_index[membership.educator_id]
+                    for day_index, target_date in enumerate(dates):
+                        segment_start = None
+                        for slot in range(rules.SLOTS_PER_DAY + 1):
+                            variable = x.get((group_id, index, day_index, slot))
+                            worked = variable is not None and solver.value(variable) == 1
+                            if worked and segment_start is None:
+                                segment_start = slot * step
+                            if not worked and segment_start is not None:
+                                assignments.append(WorkAssignment(
+                                    group_id=group_id,
+                                    educator_id=membership.educator_id,
+                                    date=target_date,
+                                    start_minute=segment_start,
+                                    end_minute=slot * step,
+                                ))
+                                segment_start = None
+        return InternatSolverResult(
+            status=result_status,
+            assignments=_canonical_merge(assignments),
+            solver_status_name=solver.status_name(status),
+            optimization_proven=False,
+        )
 
     preferred_terms: list[cp_model.IntVar] = []
     for item in configuration.unavailability:

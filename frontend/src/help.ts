@@ -234,6 +234,27 @@ export function getRuleGuidance(
 ): RuleGuidance {
   const ruleId = message.ruleId;
 
+  if (contextString(message, "conflictType") === "SEARCH_LIMIT" ||
+      (ruleId === "REQ-NO-GUESSING-001" && /limicie czasu.*(żaden wynik|optymalności)/i.test(message.message))) {
+    return {
+      title: "Obliczenia potrzebują więcej czasu — nie zmieniaj godzin",
+      explanation: "Nie jest to błąd Twoich danych ani dowód, że plan jest niemożliwy. Wybierz „Szukaj dłużej” na ekranie harmonogramu. Poprawny znaleziony plan nie czeka na idealny podział preferencji.",
+      destination: "Harmonogram → dłuższe wyszukiwanie",
+      actionLabel: "Przejdź do generatora",
+      actionTo: "/harmonogram",
+    };
+  }
+
+  if (contextString(message, "conflictType") === "QUALITY_OPTIONAL") {
+    return {
+      title: "Plan jest poprawny; ulepszenie podziału jest opcjonalne",
+      explanation: message.message,
+      destination: "Harmonogram → propozycja i raport jakości",
+      actionLabel: "Zobacz gotowy plan",
+      actionTo: "/harmonogram",
+    };
+  }
+
   if (
     ruleId === "REQ-CROSS-WEEK-001" &&
     (contextString(message, "field") === "cycleStartDate" ||

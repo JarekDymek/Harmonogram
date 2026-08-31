@@ -4,10 +4,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { api } from "../api";
+import { api, type GenerationOptions } from "../api";
+import { isBetterPlan, isValidatedPlan } from "../generation";
 import type {
   GenerateResponse,
   GroupConfiguration,
@@ -26,6 +28,7 @@ interface AppStateValue {
   configuration: ScheduleConfiguration | null;
   inputReport: InputReport | null;
   generation: GenerateResponse | null;
+  generationNotice: string | null;
   busy: boolean;
   error: string | null;
   migrationPending: boolean;
@@ -35,7 +38,7 @@ interface AppStateValue {
   loadDemo: () => Promise<ScheduleConfiguration>;
   startNew: () => Promise<ScheduleConfiguration>;
   validateInput: () => Promise<InputReport | null>;
-  generate: () => Promise<GenerateResponse | null>;
+  generate: (options?: GenerationOptions) => Promise<GenerateResponse | null>;
 }
 
 const AppStateContext = createContext<AppStateValue | null>(null);
@@ -200,6 +203,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     initial.migrationPending ? null : restore<GenerateResponse>(GENERATION_KEY),
   );
   const [busy, setBusy] = useState(false);
+  const [generationNotice, setGenerationNotice] = useState<string | null>(null);
+  const configurationRef = useRef(configuration);
+  configurationRef.current = configuration;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -226,6 +232,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const invalidateResults = useCallback(() => {
     setInputReport(null);
     setGeneration(null);
+    setGenerationNotice(null);
     setError(null);
   }, []);
 
@@ -321,21 +328,36 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return result;
   }, [configuration, run]);
 
-  const generate = useCallback(async () => {
+  const generate = useCallback(async (options: GenerationOptions = {}) => {
     if (!configuration) {
       setError("Najpierw utwórz albo wczytaj konfigurację.");
       return null;
     }
-    const result = await run(() => api.generate(configuration));
-    if (result) setGeneration(result);
+    setGenerationNotice(null);
+    const result = await run(() => api.generate(configuration, options));
+    // Never attach a late response to a configuration edited during the request.
+    if (configurationRef.current !== configuration) return null;
+    if (isValidatedPlan(generation) && (
+      !isValidatedPlan(result) || (options.optimize && !isBetterPlan(result, generation))
+    )) {
+      setGenerationNotice("Zachowano dotychczasowy poprawny plan. Ta próba nie znalazła lepszego układu.");
+      return generation;
+    }
+    if (result) {
+      setGeneration(result);
+      if (options.optimize && isValidatedPlan(result)) {
+        setGenerationNotice("Znaleziono lepszy układ. Nowy plan również przeszedł pełną kontrolę.");
+      }
+    }
     return result;
-  }, [configuration, run]);
+  }, [configuration, generation, run]);
 
   const value = useMemo<AppStateValue>(
     () => ({
       configuration,
       inputReport,
       generation,
+      generationNotice,
       busy,
       error,
       migrationPending,
@@ -351,6 +373,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       configuration,
       inputReport,
       generation,
+      generationNotice,
       busy,
       error,
       migrationPending,

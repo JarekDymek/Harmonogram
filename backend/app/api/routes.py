@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter
 
 from app.fixtures.demo import demo_configuration
@@ -24,7 +26,12 @@ router = APIRouter(prefix="/api")
 
 @router.get("/health", tags=["system"])
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "harmonogram-mow-api"}
+    return {
+        "status": "ok",
+        "service": "harmonogram-mow-api",
+        "generatorVersion": "feasible-plan-first-v1",
+        "revision": os.getenv("RENDER_GIT_COMMIT", "local"),
+    }
 
 
 @router.get(
@@ -85,8 +92,8 @@ def calculate_required_care(
     response_model=GenerateResponse,
     tags=["schedule"],
 )
-def generate(configuration: ScheduleConfiguration) -> GenerateResponse:
-    return generate_schedule(configuration)
+def generate(configuration: ScheduleConfiguration, optimize: bool = False) -> GenerateResponse:
+    return generate_schedule(configuration, optimize=optimize)
 
 
 @router.post(

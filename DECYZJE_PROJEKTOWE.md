@@ -478,12 +478,15 @@ Publiczne wyniki:
 
 ## DP-031. Limit czasu
 
+Zaktualizowano zgodnie z priorytetem użytkownika: najpierw poprawny plan, potem opcjonalne ulepszanie.
+
 Jeżeli solver osiągnie limit czasu:
 
 * nie wolno zwrócić statusu `BRAK_ROZWIAZANIA`,
-* znaleziony kandydat nie może być przedstawiony jako końcowy harmonogram,
-* wynik operacji ma status `NIE_ZAKONCZONO_WYSZUKIWANIA`,
-* kandydat może zostać zachowany wyłącznie do celów diagnostycznych.
+* znaleziony kandydat przechodzi niezależną kontrolę wszystkich wymaganych warunków,
+* kandydat z wynikiem kontroli `VALID` jest publikowany jako poprawna propozycja, bez deklaracji udowodnionego optimum,
+* status `NIE_ZAKONCZONO_WYSZUKIWANIA` dotyczy braku kandydata, nie braku idealnego podziału,
+* opcjonalne ulepszanie nie usuwa ani nie zastępuje poprawnego planu pustym, odrzuconym lub gorszym wynikiem.
 
 ---
 

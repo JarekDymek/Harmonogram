@@ -27,6 +27,7 @@ from app.services.time_utils import (
     parse_hhmm,
 )
 from app.services.weekend import selected_weekend_variant, template_tuples
+from app.solver.search import first_feasible, generation_status
 
 
 @dataclass(slots=True)
@@ -326,6 +327,8 @@ def _add_weekly_rest(
 def solve_schedule(
     configuration: ScheduleConfiguration,
     care: list[CalculatedCareDay],
+    *,
+    optimize: bool = False,
 ) -> SolverResult:
     model = cp_model.CpModel()
     educators = [item for item in configuration.educators if item.active]
@@ -586,6 +589,41 @@ def solve_schedule(
         total_days=total_days,
         cyclic=cyclic,
     )
+
+    def assignments_from(solver):
+        assignments = []
+        for educator_index, educator in enumerate(educators):
+            for day_index, day in enumerate(care):
+                segment_start = None
+                for slot in range(rules.SLOTS_PER_DAY + 1):
+                    worked = slot < rules.SLOTS_PER_DAY and solver.value(
+                        x[(educator_index, day_index, slot)]
+                    ) == 1
+                    if worked and segment_start is None:
+                        segment_start = slot * step
+                    if not worked and segment_start is not None:
+                        assignments.append(WorkAssignment(
+                            group_id=configuration.group_id or "",
+                            educator_id=educator.id,
+                            date=day.date,
+                            start_minute=segment_start,
+                            end_minute=slot * step,
+                        ))
+                        segment_start = None
+        return assignments
+
+    if not optimize:
+        # Do not even build the thousands of optional quality variables.
+        model.add_decision_strategy(list(starts.values()), cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
+        model.add_decision_strategy(list(x.values()), cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
+        solver, status = first_feasible(model, configuration)
+        result_status = generation_status(status)
+        return SolverResult(
+            status=result_status,
+            assignments=assignments_from(solver) if result_status == GenerationStatus.CANDIDATE_FOUND else [],
+            solver_status_name=solver.status_name(status),
+            optimization_proven=False,
+        )
 
     org = configuration.organizational_rules
     preferred_unavailable_terms = []
