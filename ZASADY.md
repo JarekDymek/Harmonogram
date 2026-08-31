@@ -136,15 +136,24 @@ Dla każdego tygodnia:
 
 Nie stosuje się tolerancji ani przenoszenia godzin między tygodniami.
 
-## `REQ-DAYS-001` – Dokładnie pięć dni pracy
+## `REQ-DAYS-001` – Najwyżej pięć kalendarzowych dni pracy
 
-Każdy wychowawca pracuje dokładnie pięć dni w każdym tygodniu.
+Każdy wychowawca ma najwyżej pięć dat z pracą i co najmniej dwie całkowicie wolne w tygodniu poniedziałek–niedziela. Nie wymusza się dodatkowej pracy tylko po to, by osiągnąć pięć dni.
 
 Autorytatywnym źródłem jest:
 
 `OrganizationalRulesConfiguration.requiredWorkDaysPerWeek = 5`
 
-Dniem pracy jest data z co najmniej jednym odcinkiem. Kilka odcinków tej samej daty nadal oznacza jeden dzień pracy.
+Dniem pracy jest data z jakąkolwiek pracą: szkoła, wszystkie grupy, dyżury dodatkowe i nocki. Nocka 22:00–06:00 zajmuje obie daty (również na granicy tygodni i cyklu). Kilka odcinków tej samej daty oznacza jeden dzień. Jest to reguła organizacyjna kalendarza, nie definicja prawna doby pracowniczej.
+
+## Stałe zobowiązania i rozliczenie nocek (reguły pracy v2)
+
+- Obowiązkowy dyżur to przydział opieki w konkretnej grupie: wykorzystuje jej wymiar godzin, nie dodaje nadgodzin. Powtarza się co tydzień do zmiany/usunięcia. Nie może kolidować z zapotrzebowaniem, inną pracą lub niedostępnością.
+- Szkoła blokuje dokładne godziny i zajmuje dzień pracy. Wyszukiwanie preferuje pracę internacką w dniach już zajętych, lecz nie wymusza jej kosztem odpoczynków ani zapotrzebowania. Brakujących godzin szkoły nie wolno zgadywać.
+- W dniu rozpoczęcia nocki dopuszcza się dodatkową opiekę wyłącznie 20:00–22:00, a w dniu końca 06:00–08:00. Okna są opcjonalne, chyba że wpisano obowiązkowy dyżur. Praca przyległa do nocki tworzy jeden ciągły odcinek; nadal obowiązują limity zatwierdzonego profilu. Dwa okna z nocką dają 12 godzin i nie obchodzą krótszego limitu odcinka.
+- Łączny wymiar członkostwa obejmuje stałe nocki. Przykład: 30 godz. = 22 godz. opieki + 8 godz. nocki. Każda nocka obciąża jedną wybraną grupę, tylko raz, w tygodniu rozpoczęcia. Nominalny kredyt wynosi 8 godzin; rzeczywisty czas i odpoczynki pozostają zależne od strefy czasowej.
+- Migracja zachowuje pierwotną konfigurację i wynik w prywatnej kopii lokalnej, dodaje kredyt nocek do dawnych godzin opieki jednokrotnie. Nie zmienia nazwisk, dostępności ani planów pobytu. Wynik walidatora starszego niż 2.0.0 wymaga nowego generowania.
+- Niezależny walidator kontroluje kompletność obowiązkowych przydziałów, oba dni nocy i wszystkie źródła pracy. Komunikaty prowadzą do formularza zobowiązania, zamiast sugerować przypadkowe zmiany sum godzin.
 
 ## `REQ-UNAVAILABLE-HARD-001` – Niedostępność bezwzględna
 

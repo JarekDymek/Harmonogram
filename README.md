@@ -42,7 +42,7 @@ pola oznacza API dostępne pod tym samym adresem.
 - horyzont 1–6 tygodni, rozpoczynający się w poniedziałek;
 - granice w trybie skończonym albo cyklicznym (cykl tylko dla 6 tygodni);
 - półgodzinowy model czasu i odcinki o długości co najmniej 120 minut;
-- dokładnie pięć dni pracy każdej osoby w każdym tygodniu;
+- najwyżej pięć kalendarzowych dni pracy każdej osoby w tygodniu, łącznie ze szkołą i nockami;
 - podstawowe i zatwierdzone zastępcze przydziały tygodniowe;
 - plany `BASE_WEEKLY`, `CYCLE_WEEK` i `SPECIFIC_DATE`;
 - dynamiczne zapotrzebowanie jako różnica zbiorów przedziałów;
@@ -59,9 +59,10 @@ pola oznacza API dostępne pod tym samym adresem.
 - prywatny eksport/import pełnej konfiguracji między komputerem i telefonem;
 - stałe nocki wybierane jako osoba i dzień tygodnia, automatycznie rozwijane
   do dyżurów 22:00–06:00 w każdym tygodniu planu;
-- nocka przechodząca przez północ zajmuje rzeczywiste godziny po obu stronach
-  północy, ale do limitu dni pracy jest przypisana wyłącznie do dnia jej
-  rozpoczęcia;
+- nocka 22:00–06:00 zajmuje oba dni pracy; w te dni dodatkowa opieka jest dozwolona tylko 20:00–22:00 i 06:00–08:00;
+- obowiązkowe dyżury tygodniowe: generator musi zachować osobę, dzień i godziny;
+- praca w szkole: blokuje rzeczywiste godziny, wlicza się do dni pracy i odpoczynków, nie do wymiaru grupy;
+- łączny wymiar grupy obejmuje stałe nocki (8 godz. każda), a pozostałe godziny trafiają do opieki dziennej;
 - jeden przycisk na podsumowaniu sprawdza dane i, gdy nie ma błędów, od razu
   uruchamia generator;
 - blokujące konflikty wskazują osobę, datę, godziny i dokładne miejsce poprawy;

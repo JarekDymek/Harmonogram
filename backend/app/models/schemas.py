@@ -86,6 +86,7 @@ class GroupEducatorRole(StrEnum):
 
 class DutyType(StrEnum):
     NIGHT = "NIGHT"
+    SCHOOL = "SCHOOL"
     DINING_ROOM = "DINING_ROOM"
     OTHER = "OTHER"
 
@@ -217,6 +218,7 @@ class GroupEducatorMembership(APIModel):
     role: GroupEducatorRole = GroupEducatorRole.PRIMARY
     active: bool = True
     weekly_target_hours_by_week: list[float] = Field(min_length=1, max_length=6)
+    hours_include_fixed_nights: bool = False
     description: str = ""
 
 
@@ -228,6 +230,9 @@ class ExternalDutyAssignment(APIModel):
     duty_type: DutyType = DutyType.OTHER
     locked: bool = True
     counts_towards_hours: bool = False
+    regular_night: bool = False
+    budget_group_id: str | None = None
+    credited_minutes: int | None = Field(default=None, ge=0)
     description: str = ""
 
     @model_validator(mode="after")
@@ -356,6 +361,7 @@ class BoundaryContext(APIModel):
 
 
 class ScheduleConfiguration(APIModel):
+    work_rules_version: int = 2
     schema_version: int = Field(default=3, ge=2)
     project_id: str
     project_name: str
@@ -390,6 +396,7 @@ class ScheduleConfiguration(APIModel):
     external_duty_assignments: list[ExternalDutyAssignment] = Field(default_factory=list)
     common_area_duties: list[CommonAreaDuty] = Field(default_factory=list)
     locked_assignments: list["WorkAssignment"] = Field(default_factory=list)
+    required_assignments: list["WorkAssignment"] = Field(default_factory=list)
     boundary_context: BoundaryContext | None = None
     solver_time_limit_seconds: float = Field(default=20.0, gt=0, le=300)
     random_seed: int = 20260724
@@ -477,6 +484,7 @@ class ScheduleConfiguration(APIModel):
 
     def configuration_for_group(self, group_id: str) -> "ScheduleConfiguration":
         """Buduje zgodny widok pojedynczej grupy dla kalkulatorów i walidacji."""
+        from app.domain.work_calendar import care_target_minutes
         group = next(item for item in self.groups if item.id == group_id)
         memberships = self.memberships_for_group(group_id)
         educator_by_id = {item.id: item for item in self.educators}
@@ -485,11 +493,9 @@ class ScheduleConfiguration(APIModel):
         for membership in memberships:
             source = educator_by_id[membership.educator_id]
             minutes = [
-                int(round(value * 60))
-                for value in membership.weekly_target_hours_by_week
+                care_target_minutes(self, membership, week)
+                for week in range(1, self.planning_horizon_weeks + 1)
             ]
-            while len(minutes) < self.planning_horizon_weeks:
-                minutes.append(minutes[-1])
             educators.append(
                 source.model_copy(
                     update={
@@ -659,7 +665,7 @@ class ScheduleQualityReport(APIModel):
 class ValidationReport(APIModel):
     status: ValidationStatus
     public_result: PublicResult
-    validator_version: str = "1.0.0"
+    validator_version: str = "2.0.0"
     messages: list[DomainMessage] = Field(default_factory=list)
     objective: ObjectiveBreakdown | None = None
     legal_profile_status: LegalStatus

@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { DemoNotice, EmptyState, PageHeader, StatusBadge } from "../components/UI";
 import { useAppState } from "../state/AppState";
+import { careHours } from "../nightDuties";
 import type { ScheduleConfiguration, WeekendVariant } from "../types";
 
 const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
@@ -85,6 +86,8 @@ export function resizeInternatGroups(
     next.lockedAssignments = next.lockedAssignments.filter(
       (item) => !removedIds.has(item.groupId),
     );
+    next.requiredAssignments = (next.requiredAssignments ?? []).filter(item => !removedIds.has(item.groupId));
+    next.recurringRequiredDuties = (next.recurringRequiredDuties ?? []).filter(item => !removedIds.has(item.groupId));
     const usedEducators = new Set(
       next.groupMemberships.map((item) => item.educatorId),
     );
@@ -100,6 +103,8 @@ export function resizeInternatGroups(
     next.externalDutyAssignments = next.externalDutyAssignments.filter(
       (item) => !removedEducators.has(item.educatorId),
     );
+    next.recurringNightDuties = (next.recurringNightDuties ?? []).filter(item => !removedEducators.has(item.educatorId));
+    next.recurringSchoolWork = (next.recurringSchoolWork ?? []).filter(item => !removedEducators.has(item.educatorId));
     if (next.boundaryContext) {
       next.boundaryContext.educators = next.boundaryContext.educators.filter(
         (item) => !removedEducators.has(item.educatorId),
@@ -138,6 +143,7 @@ export function resizeInternatGroups(
         });
         next.groupMemberships.push({
           ...sourceMembership,
+          weeklyTargetHoursByWeek: Array.from({ length: next.planningHorizonWeeks }, (_, week) => careHours(configuration, sourceMembership, week)),
           id: crypto.randomUUID(),
           groupId,
           educatorId,

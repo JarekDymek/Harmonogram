@@ -19,7 +19,7 @@ describe("migracja konfiguracji localStorage", () => {
     expect(migrated.scheduleBoundaryMode).toBe("CYCLIC");
     expect(migrated.educators[0].baseWeeklyAssignedMinutes).toBe(1650);
     expect(migrated.groupCount).toBe(1);
-    expect(migrated.groupMemberships[0].weeklyTargetHoursByWeek).toEqual([27.5]);
+    expect(migrated.groupMemberships[0].weeklyTargetHoursByWeek).toEqual(Array(6).fill(27.5));
     expect(migrated.recurringNightDuties).toEqual([]);
   });
 

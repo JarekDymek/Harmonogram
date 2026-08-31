@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, type GenerationOptions } from "../api";
+import { migrateWorkCalendar } from "../nightDuties";
 import { isBetterPlan, isValidatedPlan } from "../generation";
 import type {
   GenerateResponse,
@@ -117,7 +118,7 @@ export function migrateConfiguration(
   ).length;
   const educatorCount = (memberCount === 4 ? 4 : 3) as 3 | 4;
 
-  return {
+  return migrateWorkCalendar({
     ...(copy as ScheduleConfiguration),
     schemaVersion: 3,
     groupCount: activeGroups.length,
@@ -168,16 +169,30 @@ export function migrateConfiguration(
       ...item,
       groupId: item.groupId || legacyGroupId,
     })),
-  };
+  });
 }
 
 function restoreInitialConfiguration(): {
   configuration: ScheduleConfiguration | null;
   migrationPending: boolean;
+  storageError?: string;
+  workRulesUpdated?: boolean;
 } {
   for (const key of [STORAGE_KEY, V2_STORAGE_KEY, LEGACY_STORAGE_KEY]) {
     const stored = restore<Partial<ScheduleConfiguration>>(key);
     if (stored) {
+      if (stored.workRulesVersion !== 2) {
+        // A migration never overwrites the only copy of local user data.
+        const backupKey = `${STORAGE_KEY}-before-work-calendar-${stored.projectId ?? "legacy"}`;
+        try {
+          if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, JSON.stringify({
+            configuration: stored, generation: restore(GENERATION_KEY), savedAt: new Date().toISOString(),
+          }));
+        } catch {
+          return { configuration: migrateConfiguration(stored), migrationPending: true,
+            storageError: "Brak miejsca na bezpieczną kopię. Oryginalnych danych nie zmieniono. Pobierz pakiet w Przenieś dane; zwolnij miejsce na urządzeniu i uruchom aplikację ponownie." };
+        }
+      }
       const pending =
         (stored.schemaVersion ?? 0) < 3 ||
         !stored.groups?.length ||
@@ -185,6 +200,7 @@ function restoreInitialConfiguration(): {
       return {
         configuration: migrateConfiguration(stored),
         migrationPending: pending,
+        workRulesUpdated: stored.workRulesVersion !== 2,
       };
     }
   }
@@ -197,7 +213,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     useState<ScheduleConfiguration | null>(initial.configuration);
   const [migrationPending, setMigrationPending] = useState(initial.migrationPending);
   const [inputReport, setInputReport] = useState<InputReport | null>(() =>
-    initial.migrationPending ? null : restore<InputReport>(INPUT_REPORT_KEY),
+    initial.migrationPending || initial.workRulesUpdated ? null : restore<InputReport>(INPUT_REPORT_KEY),
   );
   const [generation, setGeneration] = useState<GenerateResponse | null>(() =>
     initial.migrationPending ? null : restore<GenerateResponse>(GENERATION_KEY),
@@ -206,7 +222,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [generationNotice, setGenerationNotice] = useState<string | null>(null);
   const configurationRef = useRef(configuration);
   configurationRef.current = configuration;
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initial.storageError ?? null);
 
   useEffect(() => {
     if (migrationPending) return;
@@ -220,11 +236,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [configuration, migrationPending]);
 
   useEffect(() => {
+    if (initial.storageError) return;
     if (inputReport) localStorage.setItem(INPUT_REPORT_KEY, JSON.stringify(inputReport));
     else localStorage.removeItem(INPUT_REPORT_KEY);
   }, [inputReport]);
 
   useEffect(() => {
+    if (initial.storageError) return;
     if (generation) localStorage.setItem(GENERATION_KEY, JSON.stringify(generation));
     else localStorage.removeItem(GENERATION_KEY);
   }, [generation]);
@@ -238,6 +256,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const setConfiguration = useCallback(
     (value: ScheduleConfiguration) => {
+      if (initial.storageError) { setError(initial.storageError); return; }
       setConfigurationState(migrateConfiguration(value));
       setMigrationPending(false);
       invalidateResults();

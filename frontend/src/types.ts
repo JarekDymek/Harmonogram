@@ -43,6 +43,7 @@ export interface GroupEducatorMembership {
   role: "PRIMARY" | "SUPPORT";
   active: boolean;
   weeklyTargetHoursByWeek: number[];
+  hoursIncludeFixedNights?: boolean;
   description: string;
 }
 
@@ -127,9 +128,12 @@ export interface ExternalDutyAssignment {
   educatorId: string;
   startDateTime: string;
   endDateTime: string;
-  dutyType: "NIGHT" | "DINING_ROOM" | "OTHER";
+  dutyType: "NIGHT" | "SCHOOL" | "DINING_ROOM" | "OTHER";
   locked: boolean;
   countsTowardsHours: boolean;
+  regularNight?: boolean;
+  budgetGroupId?: string | null;
+  creditedMinutes?: number | null;
   description: string;
 }
 
@@ -137,6 +141,17 @@ export interface RecurringNightDuty {
   id: string;
   educatorId: string;
   startDayOfWeek: number;
+  budgetGroupId?: string;
+  description: string;
+}
+
+export interface RecurringWork {
+  id: string;
+  educatorId: string;
+  groupId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
   description: string;
 }
 
@@ -239,6 +254,10 @@ export interface ScheduleConfiguration {
   organizationalRules: OrganizationalRules;
   weekendVariants: WeekendVariant[];
   recurringNightDuties?: RecurringNightDuty[];
+  recurringRequiredDuties?: RecurringWork[];
+  recurringSchoolWork?: RecurringWork[];
+  requiredAssignments?: WorkAssignment[];
+  workRulesVersion?: number;
   externalDutyAssignments: ExternalDutyAssignment[];
   commonAreaDuties: CommonAreaDuty[];
   lockedAssignments: WorkAssignment[];

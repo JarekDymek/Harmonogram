@@ -233,6 +233,17 @@ export function getRuleGuidance(
   configuration?: ScheduleConfiguration,
 ): RuleGuidance {
   const ruleId = message.ruleId;
+  if (["REQ-REQUIRED-DUTY-001", "REQ-NIGHT-WINDOW-001", "REQ-WORK-CALENDAR-001", "REQ-DAYS-001"].includes(ruleId)) {
+    const timeLimit = contextString(message, "limitKind");
+    const section = ruleId === "REQ-REQUIRED-DUTY-001" || timeLimit === "continuous" ? "stale-dyzury" : ruleId === "REQ-NIGHT-WINDOW-001" && message.groupId !== "EXTERNAL" ? "nocki" : "szkola";
+    return {
+      title: timeLimit ? "Skróć łączny czas dyżuru" : ruleId === "REQ-REQUIRED-DUTY-001" ? "Popraw obowiązkowy dyżur" : ruleId === "REQ-NIGHT-WINDOW-001" ? "Popraw pracę obok nocki" : "Pozostaw dwa całkowicie wolne dni",
+      explanation: message.message,
+      destination: "Wychowawcy → " + (section === "szkola" ? "szkoła i obowiązkowe dyżury" : section === "nocki" ? "nocki" : "obowiązkowe dyżury"),
+      actionLabel: "Przejdź do wskazanych wpisów",
+      actionTo: `/wychowawcy${message.groupId && message.groupId !== "EXTERNAL" ? `?grupa=${encodeURIComponent(message.groupId)}` : ""}#${section}`,
+    };
+  }
 
   if (contextString(message, "conflictType") === "SEARCH_LIMIT" ||
       (ruleId === "REQ-NO-GUESSING-001" && /limicie czasu.*(żaden wynik|optymalności)/i.test(message.message))) {

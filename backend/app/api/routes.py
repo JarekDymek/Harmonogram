@@ -29,7 +29,7 @@ def health() -> dict[str, str]:
     return {
         "status": "ok",
         "service": "harmonogram-mow-api",
-        "generatorVersion": "feasible-plan-first-v1",
+        "generatorVersion": "unified-work-calendar-v2",
         "revision": os.getenv("RENDER_GIT_COMMIT", "local"),
     }
 

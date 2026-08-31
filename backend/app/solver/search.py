@@ -21,6 +21,8 @@ def first_feasible(model: cp_model.CpModel, configuration: ScheduleConfiguration
         solver.parameters.num_search_workers = 1
         solver.parameters.random_seed = configuration.random_seed
         solver.parameters.stop_after_first_solution = True
+        if not attempt and any(d.duty_type == "SCHOOL" and d.locked for d in configuration.external_duty_assignments):
+            solver.parameters.search_branching = cp_model.FIXED_SEARCH
         if attempt:
             solver.parameters.search_branching = cp_model.FIXED_SEARCH
             solver.parameters.cp_model_presolve = False

@@ -2,6 +2,8 @@ import type {
   ExternalDutyAssignment,
   RecurringNightDuty,
   ScheduleConfiguration,
+  GroupEducatorMembership,
+  WorkAssignment,
 } from "./types";
 
 export const NIGHT_START_TIME = "22:00";
@@ -131,12 +133,13 @@ function expandRecurringNight(
   const totalDays = configuration.planningHorizonWeeks * 7;
   const assignments: ExternalDutyAssignment[] = [];
 
-  for (let dayIndex = 0; dayIndex < totalDays; dayIndex += 1) {
+  // Sunday before the cycle contributes Monday's work/rest, not this week's hours.
+  for (let dayIndex = -1; dayIndex < totalDays; dayIndex += 1) {
     const date = addDays(firstDate, dayIndex);
     if (weekdayIndex(date) !== duty.startDayOfWeek) continue;
     const startDate = formatDate(date);
     assignments.push(
-      createNightAssignment({
+      { ...createNightAssignment({
         id: `${GENERATED_NIGHT_PREFIX}${duty.id}-${startDate}`,
         educatorId: duty.educatorId,
         startDate,
@@ -144,7 +147,8 @@ function expandRecurringNight(
         description:
           duty.description ||
           `Stała nocka: ${WEEKDAY_NAMES[duty.startDayOfWeek]} 22:00–06:00.`,
-      }),
+      }), regularNight: true, countsTowardsHours: true, creditedMinutes: 480,
+        budgetGroupId: duty.budgetGroupId ?? nightBudgetGroup(configuration, duty.educatorId) },
     );
   }
   return assignments;
@@ -152,20 +156,101 @@ function expandRecurringNight(
 
 export function prepareConfigurationForApi(
   configuration: ScheduleConfiguration,
-): Omit<ScheduleConfiguration, "recurringNightDuties"> {
-  const { recurringNightDuties = [], ...backendConfiguration } = configuration;
+): Omit<ScheduleConfiguration, "recurringNightDuties" | "recurringSchoolWork" | "recurringRequiredDuties"> {
+  const { recurringNightDuties = [], recurringSchoolWork = [], recurringRequiredDuties = [], ...backendConfiguration } = configuration;
   const manualAssignments = configuration.externalDutyAssignments.filter(
-    (item) => !item.id.startsWith(GENERATED_NIGHT_PREFIX),
+    (item) => !recurringNightDuties.some(d => item.id.startsWith(`${GENERATED_NIGHT_PREFIX}${d.id}-`))
+      && !recurringSchoolWork.some(d => item.id.startsWith(`RECURRING-SCHOOL-${d.id}-`)),
   );
+  const school: ExternalDutyAssignment[] = [];
+  const required: WorkAssignment[] = [...(configuration.requiredAssignments ?? [])];
+  const minute = (time: string) => { const [h, m] = time.split(":").map(Number); return h * 60 + m; };
+  for (let day = 0; day < configuration.planningHorizonWeeks * 7; day++) {
+    const date = addDays(parseDate(configuration.cycleStartDate), day);
+    for (const item of recurringRequiredDuties.filter(i => i.dayOfWeek === weekdayIndex(date))) {
+      required.push({ groupId: item.groupId, educatorId: item.educatorId, date: formatDate(date),
+                      startMinute: minute(item.startTime), endMinute: minute(item.endTime) });
+    }
+    for (const item of recurringSchoolWork.filter(i => i.dayOfWeek === weekdayIndex(date))) {
+      school.push({ id: `RECURRING-SCHOOL-${item.id}-${formatDate(date)}`, educatorId: item.educatorId,
+                    startDateTime: localDateTimeToIso(formatDate(date), item.startTime, configuration.timeZoneId),
+                    endDateTime: localDateTimeToIso(formatDate(date), item.endTime, configuration.timeZoneId),
+                    dutyType: "SCHOOL", locked: true, countsTowardsHours: false, description: item.description || "Praca w szkole" });
+    }
+  }
   return {
     ...backendConfiguration,
+    requiredAssignments: required,
     externalDutyAssignments: [
       ...manualAssignments,
+      ...school,
       ...recurringNightDuties.flatMap((duty) =>
         expandRecurringNight(configuration, duty),
       ),
     ],
   };
+}
+
+export function nightBudgetGroup(configuration: ScheduleConfiguration, educatorId: string): string | undefined {
+  const memberships = configuration.groupMemberships.filter(m => m.active && m.educatorId === educatorId);
+  return memberships.length === 1 ? memberships[0].groupId : undefined;
+}
+
+const expandedCache = new WeakMap<ScheduleConfiguration, ExternalDutyAssignment[]>();
+
+export function fixedNightHours(configuration: ScheduleConfiguration, membership: GroupEducatorMembership, weekIndex: number): number {
+  const first = addDays(parseDate(configuration.cycleStartDate), weekIndex * 7);
+  const end = formatDate(addDays(first, 7));
+  const start = formatDate(first);
+  let duties = expandedCache.get(configuration);
+  if (!duties) {
+    duties = prepareConfigurationForApi(configuration).externalDutyAssignments;
+    expandedCache.set(configuration, duties);
+  }
+  return duties.reduce((sum, d) => {
+    const p = zonedParts(new Date(d.startDateTime), configuration.timeZoneId);
+    const date = `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+    return sum + (d.regularNight && d.locked && d.countsTowardsHours && d.educatorId === membership.educatorId
+      && d.budgetGroupId === membership.groupId && start <= date && date < end ? (d.creditedMinutes ?? 480) / 60 : 0);
+  }, 0);
+}
+
+export function careHours(configuration: ScheduleConfiguration, membership: GroupEducatorMembership, weekIndex: number): number {
+  return (membership.weeklyTargetHoursByWeek[weekIndex] ?? membership.weeklyTargetHoursByWeek.at(-1) ?? 0)
+    - (membership.hoursIncludeFixedNights ? fixedNightHours(configuration, membership, weekIndex) : 0);
+}
+
+export function calendarDuties(configuration: ScheduleConfiguration) {
+  const duties = prepareConfigurationForApi(configuration).externalDutyAssignments.filter(d => d.locked);
+  const first = parseDate(configuration.cycleStartDate);
+  return Array.from({ length: configuration.planningHorizonWeeks * 7 }, (_, index) => {
+    const date = formatDate(addDays(first, index));
+    const start = new Date(localDateTimeToIso(date, "00:00", configuration.timeZoneId)).getTime();
+    const end = new Date(localDateTimeToIso(formatDate(addDays(first, index + 1)), "00:00", configuration.timeZoneId)).getTime();
+    return duties.filter(d => new Date(d.startDateTime).getTime() < end && start < new Date(d.endDateTime).getTime()).map(d => {
+      const begin = zonedParts(new Date(d.startDateTime), configuration.timeZoneId);
+      const finish = zonedParts(new Date(d.endDateTime), configuration.timeZoneId);
+      return { ...d, date, startMinute: new Date(d.startDateTime).getTime() <= start ? 0 : begin.hour * 60 + begin.minute,
+        endMinute: new Date(d.endDateTime).getTime() >= end ? 1440 : finish.hour * 60 + finish.minute };
+    });
+  }).flat();
+}
+
+// Add the nights once. The old day-care allocation and every original input survive.
+export function migrateWorkCalendar(configuration: ScheduleConfiguration): ScheduleConfiguration {
+  const next = { ...configuration, workRulesVersion: 2,
+    recurringRequiredDuties: configuration.recurringRequiredDuties ?? [],
+    recurringSchoolWork: configuration.recurringSchoolWork ?? [],
+    requiredAssignments: configuration.requiredAssignments ?? [],
+    recurringNightDuties: (configuration.recurringNightDuties ?? []).map(d => ({ ...d,
+      budgetGroupId: d.budgetGroupId ?? nightBudgetGroup(configuration, d.educatorId) })),
+  };
+  next.groupMemberships = configuration.groupMemberships.map(m => m.hoursIncludeFixedNights ? m : ({ ...m,
+    hoursIncludeFixedNights: true,
+    weeklyTargetHoursByWeek: Array.from({ length: configuration.planningHorizonWeeks }, (_, w) =>
+      (m.weeklyTargetHoursByWeek[w] ?? m.weeklyTargetHoursByWeek.at(-1) ?? 0) + fixedNightHours(next, m, w)),
+  }));
+  return next;
 }
 
 export function recurringNightLabel(dayOfWeek: number): string {

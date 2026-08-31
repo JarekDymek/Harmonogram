@@ -8,6 +8,10 @@ from math import ceil
 from ortools.sat.python import cp_model
 
 from app.domain import rules
+from app.domain.work_calendar import (
+    allowed_beside_night, care_target_minutes, fixed_on_date, same_night_block,
+    night_windows,
+)
 from app.models.schemas import (
     CalculatedCareDay,
     GenerationStatus,
@@ -72,7 +76,8 @@ def _fixed_occupancy(
     step = configuration.organizational_rules.time_step_minutes
     slot_start = slot * step
     slot_end = slot_start + step
-    for assignment in configuration.locked_assignments:
+    for assignment in [*configuration.locked_assignments,
+                       *(a for a in configuration.required_assignments if a.group_id not in configuration.selected_group_ids)]:
         if (
             assignment.educator_id == educator_id
             and assignment.date == target_date
@@ -103,26 +108,7 @@ def _fixed_workday(
     educator_id: str,
     target_date,
 ) -> bool:
-    """Przypisuje noc przechodzącą przez północ do dnia jej rozpoczęcia.
-
-    Zajętość nadal obejmuje wszystkie rzeczywiste sloty dyżuru i jest używana
-    do kontroli kolizji oraz odpoczynku. Do limitu dni pracy jeden dyżur nocny
-    może jednak dodać tylko jeden dzień, zgodnie z dniem wskazanym przez
-    użytkownika jako dzień rozpoczęcia nocki.
-    """
-    if any(
-        assignment.educator_id == educator_id
-        and assignment.date == target_date
-        for assignment in configuration.locked_assignments
-    ):
-        return True
-    project_zone = zone(configuration.time_zone_id)
-    return any(
-        duty.locked
-        and duty.educator_id == educator_id
-        and duty.start_date_time.astimezone(project_zone).date() == target_date
-        for duty in configuration.external_duty_assignments
-    )
+    return fixed_on_date(configuration, educator_id, target_date)
 
 
 def _canonical_merge(assignments: list[WorkAssignment]) -> list[WorkAssignment]:
@@ -219,6 +205,13 @@ def solve_internat_schedule(
                 hard_slots[(item.educator_id, day_index)].update(unavailable)
 
     x: dict[tuple[str, int, int, int], cp_model.IntVar] = {}
+    for educator in educators:
+        for day_index, date in enumerate(dates):
+            hard_slots[(educator.id, day_index)].update(
+                slot for slot in range(rules.SLOTS_PER_DAY)
+                if not allowed_beside_night(configuration, educator.id, date,
+                                            slot * step, (slot + 1) * step)
+            )
     by_educator_day_slot: dict[
         tuple[int, int, int], list[cp_model.IntVar]
     ] = defaultdict(list)
@@ -248,6 +241,19 @@ def solve_internat_schedule(
                     by_educator_day_slot[(index, day_index, slot)].append(variable)
                     variables.append(variable)
                 model.add(sum(variables) == 1)
+
+    # Required care is coverage, not an external occupancy block.
+    for assignment in configuration.required_assignments:
+        if assignment.group_id not in group_ids:
+            continue
+        index = educator_index.get(assignment.educator_id)
+        day_index = (assignment.date - configuration.cycle_start_date).days
+        for slot in range(assignment.start_minute // step, assignment.end_minute // step):
+            variable = x.get((assignment.group_id, index, day_index, slot))
+            if variable is None:
+                model.add_bool_or([])
+            else:
+                model.add(variable == 1)
 
     global_x: dict[tuple[int, int, int], cp_model.IntVar] = {}
     occupied_x: dict[tuple[int, int, int], cp_model.IntVar] = {}
@@ -430,7 +436,7 @@ def solve_internat_schedule(
             ]
             model.add(
                 sum(slots) * step
-                == _membership_minutes(membership, week_index + 1)
+                == care_target_minutes(configuration, membership, week_index + 1)
             )
 
     works_day: dict[tuple[int, int], cp_model.IntVar] = {}
@@ -464,7 +470,7 @@ def solve_internat_schedule(
                     works_day[(index, day_index)]
                     for day_index in range(week_index * 7, (week_index + 1) * 7)
                 )
-                == configuration.organizational_rules.required_work_days_per_week
+                <= configuration.organizational_rules.required_work_days_per_week
             )
 
     # Ustalone, grupowe wzorce weekendowe.
@@ -505,6 +511,11 @@ def solve_internat_schedule(
             if next_day_index
             else configuration.cycle_start_date + timedelta(days=total_days)
         )
+        night_bridge = {
+            index for index, educator in enumerate(educators)
+            if same_night_block(configuration, educator.id, dates[day_index],
+                                1200, next_date, 480)
+        }
         for current_slot in range(rules.SLOTS_PER_DAY):
             for next_slot in range(rules.SLOTS_PER_DAY):
                 rest = elapsed_minutes(
@@ -519,6 +530,8 @@ def solve_internat_schedule(
                         current_fixed = (index, day_index, current_slot) in fixed_slots
                         next_fixed = (index, next_day_index, next_slot) in fixed_slots
                         if current_fixed and next_fixed:
+                            continue
+                        if index in night_bridge and current_slot * step >= 1200 and (next_slot + 1) * step <= 480:
                             continue
                         model.add(
                             occupied_x[(index, day_index, current_slot)]
@@ -547,7 +560,34 @@ def solve_internat_schedule(
                     <= maximum_daily
                 )
 
+    maximum_segment = configuration.legal_rules.maximum_absolute_segment_minutes
+    if maximum_segment is not None:
+        maximum_slots = maximum_segment // step
+        for index in range(len(educators)):
+            timeline = [occupied_x[index, day, slot] for day in range(total_days) for slot in range(rules.SLOTS_PER_DAY)]
+            if cyclic:
+                timeline += timeline[:maximum_slots]
+            for start_slot in range(len(timeline) - maximum_slots):
+                model.add(sum(timeline[start_slot:start_slot + maximum_slots + 1]) <= maximum_slots)
+        for index, educator in enumerate(educators):
+            for night_start, night_end in night_windows(configuration, educator.id):
+                start_index = (night_start.date() - configuration.cycle_start_date).days
+                end_index = (night_end.date() - configuration.cycle_start_date).days
+                if cyclic:
+                    start_index %= total_days
+                    end_index %= total_days
+                if 0 <= start_index < total_days or 0 <= end_index < total_days:
+                    before = (sum(occupied_x[index, start_index, s] for s in range(1200 // step, 1440 // step)) * step
+                              if 0 <= start_index < total_days else 1440 - night_start.hour * 60 - night_start.minute)
+                    after = (sum(occupied_x[index, end_index, s] for s in range(480 // step)) * step
+                             if 0 <= end_index < total_days else night_end.hour * 60 + night_end.minute)
+                    model.add(before + after <= maximum_segment)
+
     if not optimize:
+        # Avoid creating extra travel/work dates; fixed school/night dates first.
+        extra_days = [value for (index, day), value in works_day.items()
+                      if not _fixed_workday(configuration, educators[index].id, dates[day])]
+        model.add_decision_strategy(extra_days, cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
         model.add_decision_strategy(list(group_starts.values()), cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
         model.add_decision_strategy(list(x.values()), cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
         solver, status = first_feasible(model, configuration)
@@ -616,7 +656,13 @@ def solve_internat_schedule(
                 long_terms.append(over)
 
     # Dodatkowe odcinki w dniu: liczba globalnych startów minus dzień pracy.
-    split_expression = sum(global_starts) - sum(works_day.values())
+    care_work_days = []
+    for index in range(len(educators)):
+        for day in range(total_days):
+            care_day = model.new_bool_var(f"care_day_{index}_{day}")
+            model.add_max_equality(care_day, [global_x[index, day, slot] for slot in range(rules.SLOTS_PER_DAY)])
+            care_work_days.append(care_day)
+    split_expression = sum(global_starts) - sum(care_work_days)
     canonical_terms: list[cp_model.LinearExpr] = []
     for (group_id, index, day_index, slot), variable in x.items():
         group_order = group_ids.index(group_id)

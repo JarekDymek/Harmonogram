@@ -30,6 +30,7 @@ def _solve_once(configuration: ScheduleConfiguration, care, *, optimize: bool = 
         len(configuration.active_groups()) > 1
         or bool(configuration.external_duty_assignments)
         or bool(configuration.locked_assignments)
+        or bool(configuration.required_assignments)
     )
     if use_internat_solver:
         return solve_internat_schedule(configuration, care, optimize=optimize)
@@ -235,7 +236,7 @@ def _diagnose_no_solution(
             )
         ]
 
-    for work_days in (4, 6):
+    for work_days in (6,):
         candidate = configuration.model_copy(deep=True)
         candidate.organizational_rules.required_work_days_per_week = work_days
         if attempt(candidate):
@@ -244,7 +245,7 @@ def _diagnose_no_solution(
                     rules.RULE_DAYS,
                     (
                         "Suma godzin jest poprawna, ale nie da się jej rozłożyć "
-                        "na dokładnie pięć dni pracy każdej osoby przy obecnych "
+                        "na najwyżej pięć dni pracy każdej osoby przy obecnych "
                         "nockach, weekendach i niedostępności. Sprawdź osobę z "
                         "największą liczbą zablokowanych dni."
                     ),

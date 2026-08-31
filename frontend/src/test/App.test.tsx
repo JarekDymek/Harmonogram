@@ -156,7 +156,7 @@ describe("główny przepływ interfejsu", () => {
     );
     renderApp("/wychowawcy");
     expect(
-      screen.getAllByLabelText(/^Godziny opieki/),
+      screen.getAllByLabelText(/^Łącznie: opieka/),
     ).toHaveLength(3);
     expect(screen.getAllByDisplayValue("27,5")).toHaveLength(2);
     expect(screen.queryByText("Minuty tygodniowo")).not.toBeInTheDocument();
@@ -206,7 +206,7 @@ describe("główny przepływ interfejsu", () => {
     const balanceCard = screen.getByText("brakuje 2 godz.").closest("article");
     expect(balanceCard).toBeVisible();
     expect(balanceCard).toHaveTextContent("zwiększ sumę pól tego tygodnia o 2 godz.");
-    for (const input of screen.getAllByLabelText(/^Godziny opieki/)) {
+    for (const input of screen.getAllByLabelText(/^Łącznie: opieka/)) {
       expect(input).toHaveAttribute("aria-invalid", "true");
     }
     expect(screen.queryByText("Globalne podsumowanie godzin")).not.toBeInTheDocument();
@@ -263,7 +263,7 @@ describe("główny przepływ interfejsu", () => {
     await user.click(screen.getByRole("button", { name: "Dodaj stałą nockę" }));
 
     expect(
-      await screen.findByText(/Wychowawca A · wtorek 22:00 → środa 06:00 · co tydzień/i),
+      await screen.findByText(/Wychowawca A · wtorek 22:00 → środa 06:00 · dwa dni pracy · co tydzień/i),
     ).toBeVisible();
     expect(view.container.querySelector('input[type="datetime-local"]')).toBeNull();
   });
