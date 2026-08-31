@@ -12,6 +12,7 @@ import {
 } from "../components/UI";
 import { useAppState } from "../state/AppState";
 import { isValidatedPlan } from "../generation";
+import { calendarDuties, fixedNightHours } from "../nightDuties";
 
 function educatorColor(educatorId: string) {
   let hash = 0;
@@ -58,6 +59,7 @@ export function SchedulePage() {
 
   if (!isValidatedPlan(generation)) {
     const hasAttempt = generation !== null;
+    const stale = generation?.validationReport?.status === "VALID" && generation.validationReport.validatorVersion !== "2.0.0";
     const title =
       generation?.publicResult === "NIE_ZAKONCZONO_WYSZUKIWANIA"
         ? "Wyszukiwanie nie zostało zakończone"
@@ -68,14 +70,14 @@ export function SchedulePage() {
       <>
         <PageHeader
           eyebrow="KROK 08 · WYNIK"
-          title={title}
+          title={stale ? "Przelicz plan według nowych zasad dni pracy" : title}
           description={
-            hasAttempt
+            stale ? "Zachowano dane i kopię poprzedniego wyniku. Nowa kontrola dolicza szkołę oraz obie daty nocki. Kliknij Uruchom generator. Nie trzeba wpisywać danych ponownie." : hasAttempt
               ? "Nie masz jeszcze sprawdzonego planu. Brak wyniku nie oznacza błędu godzin — poniżej podajemy rzeczywistą przyczynę."
               : "Aplikacja najpierw ułoży propozycję spełniającą wymagane warunki, a następnie niezależnie ją sprawdzi."
           }
         />
-        {generation && (
+        {generation && !stale && (
           <section className="validation-summary">
             <div>
               <small>Status generatora</small>
@@ -114,6 +116,12 @@ export function SchedulePage() {
   const allWeekAssignments = generation.assignments.filter((item) =>
     weekDates.includes(item.date),
   );
+  const duties = calendarDuties(configuration).filter(d => weekDates.includes(d.date));
+  const allWorkDates = (educatorId: string) => new Set([
+    ...allWeekAssignments.filter(a => a.educatorId === educatorId).map(a => a.date),
+    ...duties.filter(a => a.educatorId === educatorId).map(a => a.date),
+    ...configuration.lockedAssignments.filter(a => a.educatorId === educatorId && weekDates.includes(a.date)).map(a => a.date),
+  ]);
   const assignments = allWeekAssignments.filter(
     (item) => item.groupId === configuration.activeGroupId,
   );
@@ -136,7 +144,8 @@ export function SchedulePage() {
         (sum, item) => sum + item.endMinute - item.startMinute,
         0,
       ),
-      days: new Set(relevant.map((item) => item.date)).size,
+      days: allWorkDates(educator.id).size,
+      nightMinutes: fixedNightHours(configuration, configuration.groupMemberships.find(m => m.educatorId === educator.id && m.groupId === configuration.activeGroupId)!, week - 1) * 60,
       splitDays: weekDates.filter(
         (date) =>
           relevant.filter((item) => item.date === date).length > 1,
@@ -153,7 +162,7 @@ export function SchedulePage() {
         (sum, item) => sum + item.endMinute - item.startMinute,
         0,
       ),
-      days: new Set(relevant.map((item) => item.date)).size,
+      days: allWorkDates(educator.id).size,
     };
   });
 
@@ -281,6 +290,11 @@ export function SchedulePage() {
                       </div>
                     );
                   })}
+                {duties.filter(d => d.date === date && memberIds.has(d.educatorId)).map(d => <div className="shift" key={`${d.id}-${date}`} style={{ backgroundColor: educatorColor(d.educatorId) }}>
+                  <span>{configuration.educators.find(e => e.id === d.educatorId)?.shortCode}</span>
+                  <strong>{minutesToTime(d.startMinute)}–{minutesToTime(d.endMinute)}</strong>
+                  <small>{d.dutyType === "NIGHT" ? "Nocka — dzień pracy" : d.dutyType === "SCHOOL" ? "Szkoła — dzień pracy" : "Inny dyżur"}</small>
+                </div>)}
               </div>
             </article>
           ))}
@@ -291,7 +305,7 @@ export function SchedulePage() {
             <article key={educator.id}>
               <header>
                 <div className={`avatar avatar--${educator.id}`}>
-                  {educator.id}
+                  {educator.shortCode}
                 </div>
                 <div>
                   <h2>{educator.displayName}</h2>
@@ -313,8 +327,9 @@ export function SchedulePage() {
                           (item) =>
                             `${minutesToTime(item.startMinute)}–${minutesToTime(item.endMinute)}`,
                         )
-                        .join(", ") || "wolne"}
+                        .join(", ") || (allWorkDates(educator.id).has(date) ? "praca poza opieką tej grupy" : "wolne od wszystkich prac")}
                     </strong>
+                    {duties.filter(d => d.date === date && d.educatorId === educator.id).map(d => <small key={d.id}>{d.dutyType === "NIGHT" ? "Nocka" : "Szkoła / inny dyżur"} {minutesToTime(d.startMinute)}–{minutesToTime(d.endMinute)}</small>)}
                   </div>
                 ))}
               </div>
@@ -334,13 +349,14 @@ export function SchedulePage() {
           {weekSummary.map((item) => (
             <div className="metric person-metric" key={item.educator.id}>
               <span className={`avatar avatar--${item.educator.id}`}>
-                {item.educator.id}
+                {item.educator.shortCode}
               </span>
               <div>
                 <small>{item.educator.displayName}</small>
-                <strong>{formatMinutes(item.minutes)}</strong>
+                <strong>{formatMinutes(item.minutes + item.nightMinutes)}</strong>
+                <small>Opieka {formatMinutes(item.minutes)} + stałe nocki {formatMinutes(item.nightMinutes)}</small>
                 <span>
-                  {item.days} dni · {item.splitDays} dzielonych
+                  {item.days} dni pracy łącznie · {7 - item.days} całkowicie wolnych
                 </span>
               </div>
             </div>

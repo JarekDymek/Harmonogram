@@ -16,6 +16,7 @@ export function ValidationPage() {
       </EmptyState>
     );
   }
+  if (report.validatorVersion !== "2.0.0") return <EmptyState title="Poprzedni wynik wymaga ponownego sprawdzenia">Dane zachowano. Przejdź do Harmonogramu i uruchom generator uwzględniający obie daty nocki oraz pracę w szkole.</EmptyState>;
   return (
     <>
       <PageHeader

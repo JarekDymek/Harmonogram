@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { EmptyState, PageHeader, StatusBadge, formatMinutes } from "../components/UI";
 import { useAppState } from "../state/AppState";
+import { WorkCommitments } from "../components/WorkCommitments";
 import { formatPolishHours, parsePolishHours } from "../time";
 import {
   NIGHT_END_TIME,
@@ -10,6 +11,8 @@ import {
   createNightAssignment,
   formatNightDateTime,
   recurringNightLabel,
+  fixedNightHours,
+  careHours,
 } from "../nightDuties";
 import type { RecurringNightDuty, Unavailability } from "../types";
 
@@ -100,10 +103,7 @@ export function EducatorsPage() {
       memberships.reduce(
         (sum, membership) =>
           sum +
-          (membership.weeklyTargetHoursByWeek[weekIndex] ??
-            membership.weeklyTargetHoursByWeek.at(-1) ??
-            0) *
-            60,
+          careHours(configuration, membership, weekIndex) * 60,
         0,
       ),
   );
@@ -212,6 +212,16 @@ export function EducatorsPage() {
     });
   };
 
+  const saveRecurringNights = (nights: RecurringNightDuty[]) => {
+    const next = { ...configuration, recurringNightDuties: nights };
+    next.groupMemberships = configuration.groupMemberships.map(m => ({ ...m,
+      weeklyTargetHoursByWeek: Array.from({ length: configuration.planningHorizonWeeks }, (_, w) =>
+        careHours(configuration, m, w) + fixedNightHours(next, m, w)),
+      hoursIncludeFixedNights: true,
+    }));
+    setConfiguration(next);
+  };
+
   const addRecurringNight = () => {
     if (!recurringNight.educatorId) return;
     const recurringNightDuties = configuration.recurringNightDuties ?? [];
@@ -229,14 +239,12 @@ export function EducatorsPage() {
       id: crypto.randomUUID(),
       educatorId: recurringNight.educatorId,
       startDayOfWeek: recurringNight.startDayOfWeek,
+      budgetGroupId: activeGroup.id,
       description: "Stała nocka 22:00–06:00, powtarzana co tydzień.",
     };
-    setConfiguration({
-      ...configuration,
-      recurringNightDuties: [...recurringNightDuties, item],
-    });
+    saveRecurringNights([...recurringNightDuties, item]);
     setRecurringNight({ ...recurringNight, educatorId: "" });
-    setNightMessage("Stała nocka została dodana do każdego tygodnia planu.");
+    setNightMessage("Nocka zajmuje oba dni. Dodano 8 godzin do łącznego wymiaru każdego tygodnia; liczba godzin opieki dziennej nie zmieniła się.");
   };
 
   const addAdditionalNight = () => {
@@ -328,8 +336,8 @@ export function EducatorsPage() {
                     : "Godziny są wpisane — sprawdź ich sumę"}
             </strong>
             <p>
-              To są godziny do rozdzielenia w planie tej grupy. Nocki ustawiasz
-              osobno niżej. Wartość zapisuje się po opuszczeniu pola.
+              Wpisuj łączny wymiar: opieka + stałe nocki. Poniżej pola widać podział.
+              Nocka zajmuje 8 godzin wymiaru i oba dni kalendarzowe. Suma z planem pobytu porównuje tylko opiekę dzienną.
             </p>
           </div>
         </div>
@@ -395,8 +403,9 @@ export function EducatorsPage() {
                     } ${mismatchedWeeks.has(weekIndex + 1) ? "field-balance-error" : ""}`.trim()}
                     key={weekIndex}
                   >
-                    Godziny opieki{configuration.planningHorizonWeeks > 1 ? ` · tydzień ${weekIndex + 1}` : ""}
+                    Łącznie: opieka + stałe nocki{configuration.planningHorizonWeeks > 1 ? ` · tydzień ${weekIndex + 1}` : ""}
                     <input
+                      key={`${membership.id}-${weekIndex}-${membership.weeklyTargetHoursByWeek[weekIndex]}`}
                       inputMode="decimal"
                       aria-invalid={
                         (membership.weeklyTargetHoursByWeek[weekIndex] ??
@@ -407,6 +416,7 @@ export function EducatorsPage() {
                       defaultValue={formatPolishHours(membership.weeklyTargetHoursByWeek[weekIndex] ?? membership.weeklyTargetHoursByWeek.at(-1) ?? 0)}
                       onBlur={(event) => updateHours(membership.id, weekIndex, event.target.value)}
                     />
+                    <small>Opieka: {formatPolishHours(careHours(configuration, membership, weekIndex))} godz. + stałe nocki: {formatPolishHours(fixedNightHours(configuration, membership, weekIndex))} godz.</small>
                     {(membership.weeklyTargetHoursByWeek[weekIndex] ??
                       membership.weeklyTargetHoursByWeek.at(-1) ??
                       0) <= 0 && <small>Wpisz więcej niż 0 godzin.</small>}
@@ -438,6 +448,8 @@ export function EducatorsPage() {
           </div>
         )}
       </section>
+
+      <WorkCommitments />
 
       <section className="section-block" id="dostepnosc">
         <div className="section-heading"><div><span className="eyebrow">KIEDY NIE MOŻE PRACOWAĆ</span><h2>Niedostępność wychowawcy</h2></div></div>
@@ -472,7 +484,14 @@ export function EducatorsPage() {
               <div className="fixed-night-hours"><small>Godziny ustawione automatycznie</small><strong>22:00 → 06:00 następnego dnia</strong></div>
               <button className="button button--primary" type="button" disabled={!recurringNight.educatorId} onClick={addRecurringNight}>Dodaj stałą nockę</button>
             </div>
-            <div className="record-list">{(configuration.recurringNightDuties ?? []).map((item) => <div className="record-row" key={item.id}><span>{educatorById.get(item.educatorId)?.shortCode}</span><strong>{educatorById.get(item.educatorId)?.displayName} · {recurringNightLabel(item.startDayOfWeek)} · co tydzień</strong><button className="icon-button" type="button" aria-label={`Usuń stałą nockę ${educatorById.get(item.educatorId)?.displayName ?? "wychowawcy"}`} onClick={() => setConfiguration({ ...configuration, recurringNightDuties: (configuration.recurringNightDuties ?? []).filter((value) => value.id !== item.id) })}>×</button></div>)}</div>
+            <div className="record-list">{(configuration.recurringNightDuties ?? []).map((item) => <div className="record-row" key={item.id}>
+              <span>{educatorById.get(item.educatorId)?.shortCode}</span>
+              <strong>{educatorById.get(item.educatorId)?.displayName} · {recurringNightLabel(item.startDayOfWeek)} · dwa dni pracy · co tydzień</strong>
+              <label>8 godzin w grupie<select aria-label={`Grupa stałej nocki ${educatorById.get(item.educatorId)?.displayName}`} value={item.budgetGroupId ?? ""} onChange={e => saveRecurringNights((configuration.recurringNightDuties ?? []).map(d => d.id === item.id ? { ...d, budgetGroupId: e.target.value } : d))}>
+                <option value="">Wybierz grupę</option>{configuration.groups.filter(g => g.active && configuration.groupMemberships.some(m => m.active && m.groupId === g.id && m.educatorId === item.educatorId)).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select></label>
+              <button className="icon-button" type="button" aria-label={`Usuń stałą nockę ${educatorById.get(item.educatorId)?.displayName ?? "wychowawcy"}`} onClick={() => saveRecurringNights((configuration.recurringNightDuties ?? []).filter(value => value.id !== item.id))}>×</button>
+            </div>)}</div>
           </article>
 
           <article className="duty-mode-card duty-mode-card--additional">

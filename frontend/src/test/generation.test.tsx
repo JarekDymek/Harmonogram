@@ -13,7 +13,7 @@ const plan: GenerateResponse = {
   generationStatus: "CANDIDATE_FOUND", publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY",
   assignments: [{groupId: "G1", educatorId: "A", date: "2026-09-14", startMinute: 360, endMinute: 480}],
   care: [], messages: [], optimizationProven: false,
-  validationReport: {status: "VALID", publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY", validatorVersion: "test",
+  validationReport: {status: "VALID", publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY", validatorVersion: "2.0.0",
     legalProfileStatus: "UNVERIFIED", legalProfileVersion: "test", messages: []},
   objective: {splitDaysPenalty: 2, continuousBlockHandovers: 2, distinctEducatorsPerBlock: 2,
     totalSegments: 4, shortMiddleSegments: 0, preferredUnavailabilityPenalty: 0,

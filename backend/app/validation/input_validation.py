@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 
 from app.domain import rules
+from app.validation.work_calendar import commitment_messages
 from app.models.schemas import (
     CalculatedCareDay,
     DomainMessage,
@@ -168,6 +169,7 @@ def _validate_internat_project(
                     date_value=assignment.date,
                 )
             )
+    messages.extend(commitment_messages(configuration))
     if _has_errors(messages):
         return InputValidationResponse(
             status=InputStatus.INVALID_INPUT,
@@ -178,7 +180,7 @@ def _validate_internat_project(
     care: list[CalculatedCareDay] = []
     balances: list[dict] = []
     for group in configuration.active_groups():
-        report = validate_configuration(configuration.configuration_for_group(group.id))
+        report = validate_configuration(configuration.configuration_for_group(group.id), _group_view=True)
         for message in report.messages:
             messages.append(
                 message
@@ -189,6 +191,10 @@ def _validate_internat_project(
         balances.extend(
             [{**item, "groupId": group.id} for item in report.weekly_balance]
         )
+    messages.extend(commitment_messages(configuration, care))
+    from app.validation.schedule_validator import _cross_group_messages
+    messages.extend(m for m in _cross_group_messages(configuration, [a for a in configuration.required_assignments if a.group_id in configuration.selected_group_ids])
+                    if m.context.get("relatedRuleId") != rules.RULE_REST_WEEKLY)
     return InputValidationResponse(
         status=(
             InputStatus.INVALID_INPUT
@@ -259,7 +265,7 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
         messages.append(
             error(
                 rules.RULE_DAYS,
-                "Każdy wychowawca musi pracować dokładnie pięć dni w tygodniu.",
+                "Limit wynosi najwyżej pięć dni pracy i co najmniej dwa dni całkowicie wolne.",
                 required=5,
                 actual=org.required_work_days_per_week,
             )
@@ -1218,6 +1224,9 @@ def _fixed_weekend_conflict_messages(
 
             conflicts: list[tuple[int, str]] = []
             for segment_start, segment_end, label in segments:
+                if (segment_end == duty_start and segment_start.date() == duty_start.date() and segment_start.hour >= 20
+                    or segment_start == duty_end and segment_end.date() == duty_end.date() and segment_end.hour <= 8):
+                    continue
                 if segment_end <= duty_start:
                     gap = int((duty_start - segment_end).total_seconds() // 60)
                 elif duty_end <= segment_start:
@@ -1335,10 +1344,11 @@ def _weekend_compatibility(
 
 def validate_configuration(
     configuration: ScheduleConfiguration,
+    *, _group_view: bool = False,
 ) -> InputValidationResponse:
-    if len(configuration.groups) > 1 or any(
+    if not _group_view and (len(configuration.groups) > 1 or any(
         item.group_id is None for item in configuration.educators
-    ):
+    ) or configuration.external_duty_assignments or configuration.required_assignments or configuration.locked_assignments):
         return _validate_internat_project(configuration)
     messages = _structural_messages(configuration)
     if _has_errors(messages):

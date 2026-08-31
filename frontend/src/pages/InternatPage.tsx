@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { DAY_NAMES, EmptyState, MessagesTable, PageHeader, StatusBadge, formatMinutes, minutesToTime } from "../components/UI";
 import { useAppState } from "../state/AppState";
 import { isValidatedPlan } from "../generation";
+import { calendarDuties } from "../nightDuties";
 
 function educatorColor(educatorId: string) {
   let hash = 0;
@@ -27,6 +28,7 @@ export function InternatPage() {
     .sort((a, b) => a.displayOrder - b.displayOrder);
   const assignments = isValidatedPlan(generation) ? generation.assignments.filter((item) => weekDates.includes(item.date)) : [];
   const educatorById = new Map(configuration.educators.map((item) => [item.id, item]));
+  const duties = calendarDuties(configuration).filter(d => weekDates.includes(d.date));
 
   return (
     <>
@@ -87,17 +89,16 @@ export function InternatPage() {
                   </tr>
                 );
               })}
-              {configuration.externalDutyAssignments.length > 0 && (
+              {duties.length > 0 && (
                 <tr className="night-row">
-                  <th><strong>NOC</strong><span>Dyżury zablokowane</span></th>
+                  <th><strong>Nocki i szkoła</strong><span>Wliczone w dni pracy</span></th>
                   {weekDates.map((date) => (
                     <td key={date}>
-                      {configuration.externalDutyAssignments
-                        .filter((item) => item.dutyType === "NIGHT" && item.startDateTime.slice(0, 10) === date)
-                        .map((item) => <div className="internat-shift internat-shift--night" key={item.id}>{educatorById.get(item.educatorId)?.shortCode ?? item.educatorId}<small>{item.startDateTime.slice(11, 16)}–{item.endDateTime.slice(11, 16)}</small></div>)}
+                      {duties.filter(item => item.date === date)
+                        .map((item) => <div className="internat-shift internat-shift--night" key={item.id}>{educatorById.get(item.educatorId)?.shortCode ?? item.educatorId}<small>{item.dutyType === "SCHOOL" ? "Szkoła" : "Nocka / dyżur"} {minutesToTime(item.startMinute)}–{minutesToTime(item.endMinute)}</small></div>)}
                     </td>
                   ))}
-                  <td><StatusBadge value={`${configuration.externalDutyAssignments.length} DYŻURÓW`} /></td>
+                  <td><StatusBadge value={`${duties.length} ODCINKÓW PRACY`} /></td>
                 </tr>
               )}
               <tr className="common-duty-row">

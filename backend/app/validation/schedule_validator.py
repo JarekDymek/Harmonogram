@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, date, datetime, timedelta
 
 from app.domain import rules
+from app.validation.work_calendar import commitment_messages, night_assignment_messages, combined_limit_messages
 from app.models.schemas import (
     CalculatedCareDay,
     CareInterval,
@@ -355,11 +356,11 @@ def _hours_and_days_messages(
             required_days = (
                 configuration.organizational_rules.required_work_days_per_week
             )
-            if actual_days != required_days:
+            if actual_days > required_days:
                 messages.append(
                     error(
                         rules.RULE_DAYS,
-                        "Liczba dni pracy w tygodniu nie jest równa pięć.",
+                        "Więcej niż pięć dni pracy w tygodniu. Potrzebne są dwa całkowicie wolne dni.",
                         educator_id=educator.id,
                         date_value=start,
                         required=required_days,
@@ -465,6 +466,8 @@ def _daily_rest_messages(
             configuration.time_zone_id,
         ).astimezone(UTC)
         actual = int((first_start - last_end).total_seconds() // 60)
+        if previous_end == 1440 and next_start == 0 and next_date == previous_date + timedelta(days=1):
+            return
         if actual < minimum:
             messages.append(
                 error(
@@ -1055,6 +1058,7 @@ def _external_as_assignments(
     configuration: ScheduleConfiguration,
 ) -> list[WorkAssignment]:
     result = list(configuration.locked_assignments)
+    result.extend(a for a in configuration.required_assignments if a.group_id not in configuration.selected_group_ids)
     time_zone_id = configuration.time_zone_id
     project_zone = zone(time_zone_id)
     for duty in configuration.external_duty_assignments:
@@ -1074,7 +1078,8 @@ def _external_as_assignments(
                 if current_date == end.date()
                 else 1440
             )
-            if end_minute > start_minute:
+            in_cycle = configuration.cycle_start_date <= current_date < configuration.cycle_start_date + timedelta(days=7 * configuration.planning_horizon_weeks)
+            if end_minute > start_minute and (configuration.schedule_boundary_mode != ScheduleBoundaryMode.CYCLIC or in_cycle):
                 # Konwersja granic jest wykonywana ponownie, niezależnie od solvera.
                 aware_local_datetime(current_date, start_minute, time_zone_id)
                 aware_local_datetime(current_date, end_minute, time_zone_id)
@@ -1195,6 +1200,12 @@ def _cross_group_messages(
             )
         )
 
+    messages.extend(combined_limit_messages(configuration, all_assignments))
+    for duty in configuration.external_duty_assignments:
+        if duty.locked and duty.duty_type != "NIGHT":
+            single = configuration.model_copy(update={"external_duty_assignments": [duty], "locked_assignments": []})
+            messages.extend(night_assignment_messages(configuration, _external_as_assignments(single)))
+
     required_days = configuration.organizational_rules.required_work_days_per_week
     external_start_dates = {
         (
@@ -1220,8 +1231,7 @@ def _cross_group_messages(
             days = {
                 item.date
                 for item in all_assignments
-                if item.group_id != "EXTERNAL"
-                and item.educator_id == educator_id
+                if item.educator_id == educator_id
                 and start <= item.date < end
             }
             days.update(
@@ -1229,11 +1239,11 @@ def _cross_group_messages(
                 for duty_educator_id, duty_date in external_start_dates
                 if duty_educator_id == educator_id and start <= duty_date < end
             )
-            if len(days) != required_days:
+            if len(days) > required_days:
                 messages.append(
                     error(
                         rules.RULE_DAYS,
-                        "Globalna liczba dni pracy wychowawcy we wszystkich grupach nie wynosi pięć.",
+                        "Szkoła, internat i obie daty nocki zajmują więcej niż pięć dni. Przenieś dyżur na już zajęty dzień, zachowując odpoczynek.",
                         educator_id=educator_id,
                         date_value=start,
                         required=required_days,
@@ -1278,6 +1288,7 @@ def _validate_internat_schedule(
             group_configuration,
             group_assignments,
             supplied,
+            _group_view=True,
         )
         independent_care.extend(calculate_care_independently(group_configuration))
         use_global_work_rules = (
@@ -1305,6 +1316,8 @@ def _validate_internat_schedule(
             )
 
     messages.extend(_no_return_messages(independent_care, canonical))
+    messages.extend(commitment_messages(configuration, independent_care, canonical))
+    messages.extend(night_assignment_messages(configuration, canonical))
     messages.extend(_cross_group_messages(configuration, canonical))
     objective = calculate_objective(configuration, independent_care, canonical)
     has_errors = any(item.severity == "ERROR" for item in messages)
@@ -1337,10 +1350,11 @@ def validate_schedule(
     configuration: ScheduleConfiguration,
     assignments: list[WorkAssignment],
     calculated_care: list[CalculatedCareDay] | None = None,
+    *, _group_view: bool = False,
 ) -> ValidationReport:
-    if len(configuration.groups) > 1 or any(
+    if not _group_view and (len(configuration.groups) > 1 or any(
         item.group_id is None for item in configuration.educators
-    ):
+    ) or configuration.external_duty_assignments or configuration.required_assignments or configuration.locked_assignments):
         return _validate_internat_schedule(
             configuration,
             assignments,

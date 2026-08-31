@@ -280,6 +280,10 @@ def test_night_duty_blocks_overlapping_group_assignment():
 
 def test_solver_respects_cross_midnight_night_duty():
     configuration = demo_configuration()
+    # With both night dates occupied, 27.5 hours cannot fit beside this weekend.
+    # The fixture limits continuous work to 8h, so neither night-adjacent window fits.
+    configuration.group_memberships[0].weekly_target_hours_by_week = [24]
+    configuration.group_memberships[1].weekly_target_hours_by_week = [31]
     start = datetime.combine(
         configuration.cycle_start_date,
         datetime.min.time(),
@@ -311,7 +315,7 @@ def test_solver_respects_cross_midnight_night_duty():
     )
 
 
-def test_cross_midnight_night_counts_as_one_workday_and_keeps_local_time():
+def test_cross_midnight_night_counts_both_workdays_and_keeps_local_time():
     configuration = demo_configuration()
     configuration.solver_time_limit_seconds = 10
     configuration.educators.append(
