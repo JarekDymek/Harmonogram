@@ -130,14 +130,14 @@ const pageHelp: Record<string, PageHelp> = {
     ],
   },
   "/urzadzenia": {
-    title: "Przenoszenie danych między urządzeniami",
-    intro: "Instalacja programu nie kopiuje lokalnych danych. Służy do tego prywatny pakiet.",
+    title: "Eksport i import projektu",
+    intro: "Prywatny plik projektu działa tak samo na telefonie i komputerze oraz może zawierać gotowy plan.",
     steps: [
-      "Na komputerze z danymi wybierz „Udostępnij pakiet na telefon” lub pobierz plik.",
-      "Przekaż plik wyłącznie na swój telefon.",
-      "Na telefonie wybierz pakiet, sprawdź podgląd i potwierdź wczytanie.",
+      "Na urządzeniu z aktualnymi danymi pobierz albo udostępnij plik projektu.",
+      "Na drugim urządzeniu wybierz ten sam plik i sprawdź podgląd.",
+      "Potwierdź wczytanie. Dotychczasowy projekt zostanie wcześniej zachowany w lokalnej kopii bezpieczeństwa.",
     ],
-    note: "Pakiet zawiera dane osobowe. Nie umieszczaj go w publicznym folderze ani repozytorium.",
+    note: "Plik zawiera dane osobowe. Nie umieszczaj go w publicznym folderze ani repozytorium.",
   },
 };
 

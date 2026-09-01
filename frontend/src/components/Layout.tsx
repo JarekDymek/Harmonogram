@@ -16,7 +16,7 @@ const navigation = [
   ["/harmonogram", "Harmonogram", "08"],
   ["/internat", "Cały internat", "09"],
   ["/walidacja", "Walidacja", "10"],
-  ["/urzadzenia", "Przenieś dane", "11"],
+  ["/urzadzenia", "Eksport i import", "11"],
 ] as const;
 
 export function Layout() {

@@ -72,8 +72,12 @@ poprzedniego wyniku.
   błędu wewnętrznego i poprawnego wyniku;
 - polskie raporty zawierające stabilne `ruleId`;
 - tygodniowy i osobowy widok harmonogramu na komputerze i telefonie;
+- edytowalny eksport aktywnej grupy do Worda `.docx`: cały horyzont 1–6
+  tygodni, jeden tydzień na stronie A4 w układzie poziomym;
 - wersjonowany lokalny zapis konfiguracji, wyniku i raportu w `localStorage`;
-- prywatny eksport/import pełnej konfiguracji między komputerem i telefonem;
+- prywatny, niezależny od urządzenia eksport/import pełnego projektu
+  `.harmonogram.json`, obejmujący konfigurację, raport oraz zgodny,
+  zwalidowany plan; starsze pakiety samej konfiguracji pozostają obsługiwane;
 - stałe nocki wybierane jako osoba i dzień tygodnia, automatycznie rozwijane
   do dyżurów 22:00–06:00 w każdym tygodniu planu;
 - nocka 22:00–06:00 zajmuje oba dni pracy; w te dni dodatkowa opieka jest dozwolona tylko 20:00–22:00 i 06:00–08:00;
@@ -302,7 +306,9 @@ Historyczne raporty spójności nie zostały zmodyfikowane przez implementację.
 - brak bazy danych, kont użytkowników, uprawnień i pracy wielostanowiskowej;
 - konfiguracja i wyniki są przechowywane w przeglądarce;
 - dane nie synchronizują się automatycznie; użytkownik przenosi je prywatnym
-  pakietem `.harmonogram.json` z podglądem przed importem;
+  plikiem projektu `.harmonogram.json` z podglądem i lokalną kopią
+  bezpieczeństwa przed importem; adres backendu nie jest przenoszony, ponieważ
+  pozostaje właściwością konkretnej instalacji;
 - brak automatycznego tworzenia zastępstw i wariantów weekendowych;
 - raport konfliktu solvera ma jawnie oznaczoną jakość `APPROXIMATE` i nie
   deklaruje minimalnego rdzenia sprzeczności;

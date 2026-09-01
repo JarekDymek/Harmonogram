@@ -4,6 +4,12 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { AppStateProvider } from "../state/AppState";
+import {
+  BEFORE_IMPORT_STORAGE_KEY,
+  createProjectTransferPackage,
+  serializeDeviceTransferPackage,
+} from "../transfer";
+import type { GenerateResponse } from "../types";
 import { configurationFixture } from "./fixture";
 
 function renderApp(path = "/") {
@@ -395,12 +401,96 @@ describe("główny przepływ interfejsu", () => {
     ]);
   });
 
-  it("udostępnia import pakietu także na telefonie bez konfiguracji", () => {
+  it("udostępnia import projektu na każdym urządzeniu bez konfiguracji", () => {
     renderApp("/urzadzenia");
     expect(
-      screen.getByRole("heading", { name: "Przenieś plan na telefon" }),
+      screen.getByRole("heading", { name: "Eksport i import projektu" }),
     ).toBeVisible();
-    expect(screen.getByText(/Na tym urządzeniu nie ma konfiguracji/i)).toBeVisible();
-    expect(screen.getByText("Wybierz pakiet z telefonu")).toBeVisible();
+    expect(screen.getByText(/Na tym urządzeniu nie ma projektu/i)).toBeVisible();
+    expect(screen.getByText("Wybierz plik projektu")).toBeVisible();
+  });
+
+  it("wczytuje gotowy plan z pliku i zachowuje pełną kopię poprzedniego projektu", async () => {
+    const previous = {
+      ...structuredClone(configurationFixture),
+      projectName: "Projekt przed importem",
+    };
+    const previousGeneration: GenerateResponse = {
+      generationStatus: "TIME_LIMIT",
+      publicResult: "NIE_ZAKONCZONO_WYSZUKIWANIA",
+      assignments: [],
+      care: [],
+      messages: [],
+    };
+    localStorage.setItem(
+      "harmonogram-mow-configuration-v3",
+      JSON.stringify(previous),
+    );
+    localStorage.setItem(
+      "harmonogram-mow-generation-v3",
+      JSON.stringify(previousGeneration),
+    );
+    const imported = {
+      ...structuredClone(configurationFixture),
+      projectName: "Projekt po imporcie",
+    };
+    const importedGeneration: GenerateResponse = {
+      generationStatus: "CANDIDATE_FOUND",
+      publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY",
+      assignments: [
+        {
+          groupId: "G1",
+          educatorId: "A",
+          date: "2026-09-14",
+          startMinute: 360,
+          endMinute: 480,
+        },
+      ],
+      care: [],
+      messages: [],
+      validationReport: {
+        status: "VALID",
+        publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY",
+        validatorVersion: "3.0.0",
+        messages: [],
+        legalProfileStatus: "UNVERIFIED",
+        legalProfileVersion: "test",
+      },
+    };
+    const file = new File(
+      [
+        serializeDeviceTransferPackage(
+          createProjectTransferPackage(imported, null, importedGeneration),
+        ),
+      ],
+      "projekt.harmonogram.json",
+      { type: "application/json" },
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    renderApp("/urzadzenia");
+
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    await user.upload(input!, file);
+    expect(await screen.findByText("Tak — zostanie wczytany")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Wczytaj projekt na tym urządzeniu" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Propozycja planu jest gotowa i sprawdzona",
+      }),
+    ).toBeVisible();
+    await waitFor(() => {
+      const saved = JSON.parse(
+        localStorage.getItem("harmonogram-mow-generation-v3") || "null",
+      );
+      expect(saved.assignments).toEqual(importedGeneration.assignments);
+    });
+    const backup = JSON.parse(localStorage.getItem(BEFORE_IMPORT_STORAGE_KEY)!);
+    expect(backup.configuration.projectName).toBe("Projekt przed importem");
+    expect(backup.generation.generationStatus).toBe("TIME_LIMIT");
   });
 });
