@@ -28,6 +28,8 @@ export function SchedulePage() {
   const { configuration, generation, generationNotice, generate, busy } = useAppState();
   const [week, setWeek] = useState(1);
   const [view, setView] = useState<"week" | "educator">("week");
+  const [exportingWord, setExportingWord] = useState(false);
+  const [exportMessage, setExportMessage] = useState("");
   useEffect(() => {
     if (
       configuration &&
@@ -55,6 +57,25 @@ export function SchedulePage() {
     });
     if (result?.publicResult === "BRAK_ROZWIAZANIA") {
       navigate("/brak-rozwiazania");
+    }
+  };
+
+  const exportWord = async () => {
+    if (!configuration || !isValidatedPlan(generation)) return;
+    setExportingWord(true);
+    setExportMessage("");
+    try {
+      const { downloadScheduleDocx } = await import("../scheduleDocx");
+      const fileName = await downloadScheduleDocx(configuration, generation);
+      setExportMessage(
+        `Pobrano edytowalny dokument Word „${fileName}” ze wszystkimi tygodniami.`,
+      );
+    } catch {
+      setExportMessage(
+        "Nie udało się utworzyć dokumentu Word. Gotowy plan pozostał zapisany w aplikacji.",
+      );
+    } finally {
+      setExportingWord(false);
     }
   };
 
@@ -175,11 +196,24 @@ export function SchedulePage() {
         description="Szczegół wybranej grupy; kontrola kolizji i odpoczynków została wykonana globalnie dla całego internatu."
         actions={
           <div className="button-row">
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={exportingWord}
+              onClick={() => void exportWord()}
+            >
+              {exportingWord ? "Tworzę Word…" : "Pobierz Word (.docx)"}
+            </button>
             <button className="button button--secondary" type="button" onClick={() => navigate("/internat")}>Cały internat</button>
             <button className="button button--secondary" type="button" onClick={() => navigate("/walidacja")}>Otwórz raport walidacji</button>
           </div>
         }
       />
+      {exportMessage && (
+        <p className="form-message" role="status">
+          {exportMessage}
+        </p>
+      )}
       {generation.publicResult === "POPRAWNY_TRYB_DEMONSTRACYJNY" && (
         <DemoNotice>
           {generation.validationReport?.demonstrationUseProhibitedNotice}

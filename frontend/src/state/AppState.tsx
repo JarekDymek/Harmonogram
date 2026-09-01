@@ -35,6 +35,11 @@ interface AppStateValue {
   error: string | null;
   migrationPending: boolean;
   setConfiguration: (value: ScheduleConfiguration) => void;
+  importProject: (
+    value: ScheduleConfiguration,
+    report: InputReport | null,
+    result: GenerateResponse | null,
+  ) => void;
   setActiveGroup: (groupId: string) => void;
   clearError: () => void;
   loadDemo: () => Promise<ScheduleConfiguration>;
@@ -265,6 +270,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [invalidateResults],
   );
 
+  const importProject = useCallback(
+    (
+      value: ScheduleConfiguration,
+      report: InputReport | null,
+      result: GenerateResponse | null,
+    ) => {
+      if (initial.storageError) {
+        setError(initial.storageError);
+        return;
+      }
+      setConfigurationState(migrateConfiguration(value));
+      setMigrationPending(false);
+      setInputReport(report);
+      setGeneration(result);
+      setGenerationNotice(
+        result
+          ? "Wczytano gotowy, sprawdzony plan z pliku projektu."
+          : null,
+      );
+      setError(null);
+    },
+    [],
+  );
+
   const setActiveGroup = useCallback(
     (groupId: string) => {
       setConfigurationState((current) => {
@@ -382,6 +411,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       error,
       migrationPending,
       setConfiguration,
+      importProject,
       setActiveGroup,
       clearError: () => setError(null),
       loadDemo,
@@ -398,6 +428,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       error,
       migrationPending,
       setConfiguration,
+      importProject,
       setActiveGroup,
       loadDemo,
       startNew,

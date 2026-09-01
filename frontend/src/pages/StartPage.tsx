@@ -134,12 +134,12 @@ export function StartPage() {
       )}
       <section className="section-block transfer-callout">
         <div>
-          <span className="eyebrow">KOMPUTER ↔ TELEFON</span>
-          <h2>{configuration ? "Przenieś ten plan na telefon" : "Masz plan zapisany na innym urządzeniu?"}</h2>
+          <span className="eyebrow">PLIK PROJEKTU · KAŻDE URZĄDZENIE</span>
+          <h2>{configuration ? "Zapisz albo przenieś cały projekt" : "Masz projekt zapisany na innym urządzeniu?"}</h2>
           <p>
-            Instalacja aplikacji nie kopiuje danych automatycznie. Użyj prywatnego
-            pakietu, aby przenieść nazwiska, godziny, nocki i dostępność bez
-            publikowania ich w internecie.
+            Jeden prywatny plik może zawierać nazwiska, godziny, nocki,
+            dostępność oraz gotowy, sprawdzony harmonogram. Ten sam plik działa
+            na telefonie i komputerze.
           </p>
         </div>
         <button
@@ -147,7 +147,7 @@ export function StartPage() {
           type="button"
           onClick={() => navigate("/urzadzenia")}
         >
-          {configuration ? "Przenieś dane" : "Wczytaj dane z komputera"}
+          {configuration ? "Eksport i import" : "Wczytaj projekt z pliku"}
         </button>
       </section>
       <section className="section-block api-connection">
