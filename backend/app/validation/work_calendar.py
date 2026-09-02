@@ -10,11 +10,45 @@ def commitment_messages(configuration, care=None, assignments=None):
     messages = []
     memberships = {(m.group_id, m.educator_id): m for m in configuration.group_memberships if m.active}
     for member in memberships.values():
+        if member.fixed_partial_schedule and member.role != "SUPPORT":
+            messages.append(error(
+                "REQ-REQUIRED-DUTY-001",
+                "Stały plan częściowy można włączyć tylko dla wychowawcy pomocniczego. Zmień rolę na pomocniczą albo wyłącz ten przełącznik.",
+                group_id=member.group_id,
+                educator_id=member.educator_id,
+                context={"field": "fixedPartialSchedule"},
+            ))
         for week in range(1, configuration.planning_horizon_weeks + 1):
-            if care_target_minutes(configuration, member, week) < 0:
+            target_minutes = care_target_minutes(configuration, member, week)
+            if target_minutes < 0:
                 messages.append(error("REQ-HOURS-001", "Łączny wymiar jest mniejszy niż wpisane stałe nocki. Zwiększ łączny wymiar albo popraw nockę.",
                                       group_id=member.group_id, educator_id=member.educator_id,
                                       context={"weekNumber": week, "field": "weeklyTargetHoursByWeek"}))
+            if member.fixed_partial_schedule:
+                week_start = configuration.cycle_start_date + timedelta(days=(week - 1) * 7)
+                week_end = week_start + timedelta(days=7)
+                fixed_minutes = sum(
+                    item.end_minute - item.start_minute
+                    for item in configuration.required_assignments
+                    if item.group_id == member.group_id
+                    and item.educator_id == member.educator_id
+                    and week_start <= item.date < week_end
+                )
+                if fixed_minutes != target_minutes:
+                    messages.append(error(
+                        "REQ-REQUIRED-DUTY-001",
+                        "Stały plan pomocniczy musi obejmować dokładnie cały wymiar opieki tej osoby. Dodaj lub popraw jej obowiązkowe dyżury powtarzane co tydzień.",
+                        group_id=member.group_id,
+                        educator_id=member.educator_id,
+                        date_value=week_start,
+                        required=target_minutes,
+                        actual=fixed_minutes,
+                        context={
+                            "weekNumber": week,
+                            "field": "recurringRequiredDuties",
+                            "conflictType": "FIXED_PARTIAL_SCHEDULE_HOURS",
+                        },
+                    ))
     care_map = {(d.group_id, d.date): d for d in care or []}
     first = configuration.cycle_start_date
     last = first + timedelta(days=configuration.planning_horizon_weeks * 7)

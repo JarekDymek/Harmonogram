@@ -138,6 +138,18 @@ export function EducatorsPage() {
     });
   };
 
+  const updateMembership = (
+    membershipId: string,
+    updates: Partial<(typeof configuration.groupMemberships)[number]>,
+  ) => {
+    setConfiguration({
+      ...configuration,
+      groupMemberships: configuration.groupMemberships.map((item) =>
+        item.id === membershipId ? { ...item, ...updates } : item,
+      ),
+    });
+  };
+
   const copyFirstWeekToAll = (membershipId: string) => {
     const membership = configuration.groupMemberships.find(
       (item) => item.id === membershipId,
@@ -195,6 +207,7 @@ export function EducatorsPage() {
           role: memberships.length < 3 ? "PRIMARY" : "SUPPORT",
           active: true,
           weeklyTargetHoursByWeek: Array(configuration.planningHorizonWeeks).fill(0),
+          fixedPartialSchedule: false,
           description: "",
         },
       ],
@@ -392,6 +405,47 @@ export function EducatorsPage() {
                 <div className="person-card__title"><span>{membership.role === "PRIMARY" ? "Podstawowy" : "Uzupełniający"}</span><StatusBadge value={membership.role} /></div>
                 <label>Imię i nazwisko<input value={educator.displayName} onChange={(event) => updateEducator(educator.id, "displayName", event.target.value)} /></label>
                 <label>Skrót<input value={educator.shortCode} onChange={(event) => updateEducator(educator.id, "shortCode", event.target.value)} /></label>
+                <label>
+                  Rola w tej grupie
+                  <select
+                    aria-label={`Rola ${educator.displayName}`}
+                    value={membership.role}
+                    onChange={(event) => {
+                      const role = event.target.value as "PRIMARY" | "SUPPORT";
+                      updateMembership(membership.id, {
+                        role,
+                        fixedPartialSchedule:
+                          role === "SUPPORT"
+                            ? membership.fixedPartialSchedule
+                            : false,
+                      });
+                    }}
+                  >
+                    <option value="PRIMARY">Stały — dokładnie 5 dni</option>
+                    <option value="SUPPORT">Pomocniczy / dochodzący</option>
+                  </select>
+                </label>
+                {membership.role === "SUPPORT" && (
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={membership.fixedPartialSchedule ?? false}
+                      onChange={(event) =>
+                        updateMembership(membership.id, {
+                          fixedPartialSchedule: event.target.checked,
+                        })
+                      }
+                    />
+                    <span>
+                      <strong>Stały plan pomocniczy</strong>
+                      <small>
+                        Pracuje także poza tą grupą. Tutaj może mieć 1–5 dni,
+                        ale wszystkie jego godziny wpisz niżej jako obowiązkowe
+                        dyżury co tydzień.
+                      </small>
+                    </span>
+                  </label>
+                )}
                 {Array.from({ length: configuration.planningHorizonWeeks }, (_, weekIndex) => (
                   <label
                     className={`${

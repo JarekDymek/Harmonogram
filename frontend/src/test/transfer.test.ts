@@ -27,7 +27,7 @@ const validatedPlan: GenerateResponse = {
   validationReport: {
     status: "VALID",
     publicResult: "POPRAWNY_TRYB_DEMONSTRACYJNY",
-    validatorVersion: "3.0.0",
+    validatorVersion: "3.1.0",
     messages: [],
     legalProfileStatus: "UNVERIFIED",
     legalProfileVersion: "test",

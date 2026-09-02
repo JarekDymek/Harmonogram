@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, date, datetime, timedelta
 
 from app.domain import rules
+from app.domain.work_calendar import uses_fixed_partial_schedule
 from app.validation.work_calendar import commitment_messages, night_assignment_messages, combined_limit_messages
 from app.validation.weekend_days_off import weekend_days_off_messages
 from app.models.schemas import (
@@ -357,11 +358,20 @@ def _hours_and_days_messages(
             required_days = (
                 configuration.organizational_rules.required_work_days_per_week
             )
-            if actual_days != required_days:
+            partial_schedule = uses_fixed_partial_schedule(
+                configuration, educator.id
+            )
+            if actual_days > required_days or (
+                not partial_schedule and actual_days != required_days
+            ):
                 messages.append(
                     error(
                         rules.RULE_DAYS,
-                        f"Plan zawiera {actual_days} dni pracy zamiast pięciu. Wygeneruj plan ponownie; nie zmieniaj sumy godzin tylko po to, by ukryć ten błąd.",
+                        (
+                            f"Stały plan pomocniczy zawiera {actual_days} dni w tym zakresie, czyli więcej niż dopuszczalne pięć. Popraw obowiązkowe dyżury."
+                            if partial_schedule
+                            else f"Plan zawiera {actual_days} dni pracy zamiast pięciu. Wygeneruj plan ponownie; nie zmieniaj sumy godzin tylko po to, by ukryć ten błąd."
+                        ),
                         educator_id=educator.id,
                         date_value=start,
                         required=required_days,
@@ -1233,6 +1243,9 @@ def _cross_group_messages(
         if item.active and item.group_id in set(configuration.selected_group_ids)
     }
     for educator_id in relevant_ids:
+        partial_schedule = uses_fixed_partial_schedule(
+            configuration, educator_id
+        )
         for week_number in range(1, configuration.planning_horizon_weeks + 1):
             start = configuration.cycle_start_date + timedelta(
                 days=(week_number - 1) * 7
@@ -1249,11 +1262,17 @@ def _cross_group_messages(
                 for duty_educator_id, duty_date in external_start_dates
                 if duty_educator_id == educator_id and start <= duty_date < end
             )
-            if len(days) > required_days or (complete and len(days) != required_days):
+            if len(days) > required_days or (
+                complete and not partial_schedule and len(days) != required_days
+            ):
                 messages.append(
                     error(
                         rules.RULE_DAYS,
-                        f"Szkoła, internat i obie daty nocki zajmują łącznie {len(days)} dni zamiast pięciu. Wygeneruj plan ponownie; każdy tydzień musi mieć pięć dni pracy i dwa całkowicie wolne.",
+                        (
+                            f"Stały plan pomocniczy zajmuje {len(days)} dni w widocznym zakresie, czyli więcej niż dopuszczalne pięć. Popraw obowiązkowe dyżury."
+                            if partial_schedule
+                            else f"Szkoła, internat i obie daty nocki zajmują łącznie {len(days)} dni zamiast pięciu. Wygeneruj plan ponownie; każdy tydzień musi mieć pięć dni pracy i dwa całkowicie wolne."
+                        ),
                         educator_id=educator_id,
                         date_value=start,
                         required=required_days,

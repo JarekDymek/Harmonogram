@@ -144,7 +144,7 @@ def test_generator_enforces_five_days_and_two_saved_days_off():
     result = generate_schedule(config)
     assert result.generation_status == "CANDIDATE_FOUND", result.messages
     assert result.validation_report.status == "VALID"
-    assert result.validation_report.validator_version == "3.0.0"
+    assert result.validation_report.validator_version == "3.1.0"
     assert config.model_dump() == before
     for educator in ("A", "B", "C"):
         days = {a.date.weekday() for a in result.assignments if a.educator_id == educator}

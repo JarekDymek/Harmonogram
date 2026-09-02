@@ -34,6 +34,22 @@ def care_target_minutes(configuration, membership, week):
     return total
 
 
+def uses_fixed_partial_schedule(configuration, educator_id):
+    """Whether every selected membership is an explicit fixed support plan."""
+    selected = set(configuration.selected_group_ids)
+    memberships = [
+        item
+        for item in configuration.group_memberships
+        if item.active
+        and item.group_id in selected
+        and item.educator_id == educator_id
+    ]
+    return bool(memberships) and all(
+        item.role == "SUPPORT" and item.fixed_partial_schedule
+        for item in memberships
+    )
+
+
 def night_windows(configuration, educator_id):
     tz = zone(configuration.time_zone_id)
     return [

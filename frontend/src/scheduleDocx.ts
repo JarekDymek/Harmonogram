@@ -272,7 +272,9 @@ function scheduleTable(
           [
             textParagraph(educator.displayName, { bold: true, size: 16 }),
             textParagraph(
-              `${formatMinutes(groupMinutes + nightMinutes)} · ${workDates.size} dni pracy`,
+              membership?.fixedPartialSchedule
+                ? `${formatMinutes(groupMinutes + nightMinutes)} · ${workDates.size} dni w tym planie`
+                : `${formatMinutes(groupMinutes + nightMinutes)} · ${workDates.size} dni pracy`,
               { size: 15, color: MUTED, after: 0 },
             ),
           ],

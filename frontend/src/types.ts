@@ -44,6 +44,7 @@ export interface GroupEducatorMembership {
   active: boolean;
   weeklyTargetHoursByWeek: number[];
   hoursIncludeFixedNights?: boolean;
+  fixedPartialSchedule?: boolean;
   description: string;
 }
 

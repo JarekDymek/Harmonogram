@@ -40,7 +40,7 @@ tydzień dla pełnego wymiaru oraz określone wyjątki wymagające decyzji dyrek
 ([tekst jednolity 2026, art. 42c](https://api.sejm.gov.pl/eli/acts/DU/2026/515/text.pdf)).
 Ta kontrola i osobisty wzorzec wolnego nie są pełnym audytem prawa: nie
 potwierdzają statusu zatrudnienia, wszystkich warunków wolnych niedziel ani
-profilu prawnego placówki. Wynik walidatora starszego niż 3.0.0 wymaga ponownego
+profilu prawnego placówki. Wynik walidatora starszego niż 3.1.0 wymaga ponownego
 generowania; przed migracją aplikacja zachowuje osobną lokalną kopię danych i
 poprzedniego wyniku.
 
@@ -80,6 +80,10 @@ poprzedniego wyniku.
   zwalidowany plan; starsze pakiety samej konfiguracji pozostają obsługiwane;
 - stałe nocki wybierane jako osoba i dzień tygodnia, automatycznie rozwijane
   do dyżurów 22:00–06:00 w każdym tygodniu planu;
+- jawny „stały plan pomocniczy” dla wychowawcy dochodzącego: jego ręcznie
+  wpisane obowiązkowe dyżury muszą pokrywać cały wymiar w grupie, są blokowane
+  w każdym tygodniu, a reguła dokładnie pięciu dni pozostaje obowiązkowa dla
+  wychowawców podstawowych;
 - nocka 22:00–06:00 zajmuje oba dni pracy; w te dni dodatkowa opieka jest dozwolona tylko 20:00–22:00 i 06:00–08:00;
 - obowiązkowe dyżury tygodniowe: generator musi zachować osobę, dzień i godziny;
 - praca w szkole: blokuje rzeczywiste godziny, wlicza się do dni pracy i odpoczynków, nie do wymiaru grupy;

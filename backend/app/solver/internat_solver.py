@@ -10,7 +10,7 @@ from ortools.sat.python import cp_model
 from app.domain import rules
 from app.domain.work_calendar import (
     allowed_beside_night, care_target_minutes, fixed_on_date, same_night_block,
-    night_windows,
+    night_windows, uses_fixed_partial_schedule,
 )
 from app.models.schemas import (
     CalculatedCareDay,
@@ -465,13 +465,20 @@ def solve_internat_schedule(
                 model.add(start <= 1 - previous)
                 global_starts.append(start)
         for week_index in range(total_weeks):
-            model.add(
-                sum(
-                    works_day[(index, day_index)]
-                    for day_index in range(week_index * 7, (week_index + 1) * 7)
-                )
-                == configuration.organizational_rules.required_work_days_per_week
+            weekly_workdays = sum(
+                works_day[(index, day_index)]
+                for day_index in range(week_index * 7, (week_index + 1) * 7)
             )
+            if uses_fixed_partial_schedule(configuration, educators[index].id):
+                model.add(
+                    weekly_workdays
+                    <= configuration.organizational_rules.required_work_days_per_week
+                )
+            else:
+                model.add(
+                    weekly_workdays
+                    == configuration.organizational_rules.required_work_days_per_week
+                )
 
     # One personal pattern across all groups. A night touching Saturday/Sunday
     # triggers it too, since works_day includes the entire fixed-work calendar.

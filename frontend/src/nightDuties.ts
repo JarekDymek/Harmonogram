@@ -247,11 +247,18 @@ export function migrateWorkCalendar(configuration: ScheduleConfiguration): Sched
     recurringNightDuties: (configuration.recurringNightDuties ?? []).map(d => ({ ...d,
       budgetGroupId: d.budgetGroupId ?? nightBudgetGroup(configuration, d.educatorId) })),
   };
-  next.groupMemberships = configuration.groupMemberships.map(m => m.hoursIncludeFixedNights ? m : ({ ...m,
-    hoursIncludeFixedNights: true,
-    weeklyTargetHoursByWeek: Array.from({ length: configuration.planningHorizonWeeks }, (_, w) =>
-      (m.weeklyTargetHoursByWeek[w] ?? m.weeklyTargetHoursByWeek.at(-1) ?? 0) + fixedNightHours(next, m, w)),
-  }));
+  next.groupMemberships = configuration.groupMemberships.map(m => {
+    const migrated = {
+      ...m,
+      fixedPartialSchedule: m.fixedPartialSchedule ?? false,
+    };
+    return m.hoursIncludeFixedNights ? migrated : ({
+      ...migrated,
+      hoursIncludeFixedNights: true,
+      weeklyTargetHoursByWeek: Array.from({ length: configuration.planningHorizonWeeks }, (_, w) =>
+        (m.weeklyTargetHoursByWeek[w] ?? m.weeklyTargetHoursByWeek.at(-1) ?? 0) + fixedNightHours(next, m, w)),
+    });
+  });
   return next;
 }
 

@@ -219,6 +219,7 @@ class GroupEducatorMembership(APIModel):
     active: bool = True
     weekly_target_hours_by_week: list[float] = Field(min_length=1, max_length=6)
     hours_include_fixed_nights: bool = False
+    fixed_partial_schedule: bool = False
     description: str = ""
 
 
@@ -369,7 +370,7 @@ class WeekendDaysOffPattern(APIModel):
 
 
 class ScheduleConfiguration(APIModel):
-    work_rules_version: int = 3
+    work_rules_version: int = 4
     schema_version: int = Field(default=3, ge=2)
     project_id: str
     project_name: str
@@ -674,7 +675,7 @@ class ScheduleQualityReport(APIModel):
 class ValidationReport(APIModel):
     status: ValidationStatus
     public_result: PublicResult
-    validator_version: str = "3.0.0"
+    validator_version: str = "3.1.0"
     messages: list[DomainMessage] = Field(default_factory=list)
     objective: ObjectiveBreakdown | None = None
     legal_profile_status: LegalStatus
