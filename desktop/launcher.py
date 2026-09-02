@@ -95,6 +95,8 @@ def run_desktop() -> int:
         return 5
 
     try:
+        # pywebview disables downloads by default, including DOCX blob links.
+        webview.settings["ALLOW_DOWNLOADS"] = True
         webview.create_window(
             "Harmonogram MOW",
             f"http://127.0.0.1:{port}/",

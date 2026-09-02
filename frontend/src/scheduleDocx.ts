@@ -19,6 +19,7 @@ import {
   WidthType,
 } from "docx";
 import { calendarDuties, fixedNightHours } from "./nightDuties";
+import { isValidatedPlan } from "./generation";
 import type {
   ExternalDutyAssignment,
   GenerateResponse,
@@ -491,17 +492,13 @@ export function scheduleDocxFileName(configuration: ScheduleConfiguration): stri
   return `harmonogram-${groupPart}-${configuration.planningHorizonWeeks}-tygodni-${configuration.cycleStartDate}.docx`;
 }
 
-export async function downloadScheduleDocx(
+export async function createScheduleDocxFile(
   configuration: ScheduleConfiguration,
   generation: GenerateResponse,
-): Promise<string> {
+): Promise<File> {
+  if (!isValidatedPlan(generation)) {
+    throw new Error("Najpierw wygeneruj i sprawdź harmonogram.");
+  }
   const blob = await createScheduleDocxBlob(configuration, generation);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  const fileName = scheduleDocxFileName(configuration);
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  return fileName;
+  return new File([blob], scheduleDocxFileName(configuration), { type: blob.type });
 }

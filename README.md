@@ -33,6 +33,16 @@ czwartego wychowawcy, stałych dyżurów, importu i eksportu nie opisuje obecnej
 
 ## Gotowe wersje
 
+### Pobieranie Worda
+
+W kroku **Harmonogram** gotowy wynik jest automatycznie przygotowywany do Worda
+dla wszystkich tygodni. **Pobierz Word (.docx)** jest bezpośrednim odnośnikiem,
+który można nacisnąć ponownie bez ponownego generowania planu. Na telefonach
+obsługujących pliki dostępne jest także **Udostępnij plik**. Pliku należy szukać
+w Pobranych przeglądarki lub w wybranym folderze. Błąd eksportu nie usuwa planu.
+
+### Instalacja
+
 - **PWA:** <https://jarekdymek.github.io/Harmonogram/> — instalowana z
   przeglądarki na komputerze lub telefonie;
 - **Windows:** [najnowszy instalator

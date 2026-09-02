@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import JSZip from "jszip";
 import {
   createScheduleDocxBlob,
+  createScheduleDocxFile,
   scheduleDocxFileName,
 } from "../scheduleDocx";
 import type { GenerateResponse } from "../types";
@@ -49,8 +51,20 @@ describe("edytowalny eksport Word", () => {
     );
     expect(bytes.length).toBeGreaterThan(5000);
     expect(String.fromCharCode(bytes[0], bytes[1])).toBe("PK");
+    const zip = await JSZip.loadAsync(bytes);
+    const xml = await zip.file("word/document.xml")!.async("string");
+    const documentXml = new DOMParser().parseFromString(xml, "text/xml");
+    const wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    expect(documentXml.getElementsByTagNameNS(wordNamespace, "tbl")).toHaveLength(6);
+    expect(documentXml.getElementsByTagNameNS(wordNamespace, "sectPr")).toHaveLength(6);
     expect(scheduleDocxFileName(configuration)).toBe(
       "harmonogram-i-6-tygodni-2026-09-14.docx",
     );
+    const file = await createScheduleDocxFile(configuration, generation);
+    expect(file.name).toBe(scheduleDocxFileName(configuration));
+    expect(file.type).toBe(blob.type);
+    expect(file.size).toBeGreaterThan(5000);
+    await expect(createScheduleDocxFile(configuration, { ...generation, validationReport: null }))
+      .rejects.toThrow("Najpierw wygeneruj i sprawdź harmonogram.");
   });
 });
