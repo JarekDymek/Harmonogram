@@ -193,6 +193,8 @@ describe("pomoc kontekstowa", () => {
 
   it("bezpiecznie obsługuje nieznaną regułę", () => {
     const guidance = getRuleGuidance(message("REQ-NEW-999"));
-    expect(guidance.actionTo).toBe("/podsumowanie");
+    expect(guidance.actionTo).toBe("/urzadzenia");
+    expect(guidance.repairable).toBe(false);
+    expect(getRepairOptions(message("REQ-NEW-999"))).toEqual([]);
   });
 });

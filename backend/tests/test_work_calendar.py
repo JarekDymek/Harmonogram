@@ -221,3 +221,52 @@ def test_fixed_support_plan_requires_all_hours_to_be_entered_manually():
     assert message.required_value == 12 * 60
     assert message.actual_value == 6 * 60
     assert "obowiązkowe dyżury" in message.message
+
+
+def test_fixed_support_weekend_takes_priority_without_changing_saved_rotation():
+    config = fixed_support_plan()
+    config.required_assignments[1].end_minute = 1080
+    config.required_assignments.append(WorkAssignment(
+        group_id="G1", educator_id="D", date=config.cycle_start_date + timedelta(days=5),
+        start_minute=1200, end_minute=1320,
+    ))
+    before = config.model_dump()
+    result = generate_schedule(config)
+    assert result.generation_status == "CANDIDATE_FOUND", result.messages
+    assert result.validation_report.status == "VALID"
+    assert config.model_dump() == before
+    saturday = [a for a in result.assignments if a.date.weekday() == 5]
+    assert [(a.educator_id, a.start_minute, a.end_minute) for a in saturday] == [
+        ("A", 360, 840), ("B", 840, 1200), ("D", 1200, 1320)]
+    assert sum(a.end_minute - a.start_minute for a in result.assignments if a.educator_id == "D") == 720
+    assert validate_schedule(config, result.assignments).status == "VALID"
+
+
+def test_priority_applies_to_primary_required_duty_and_substitute_too():
+    from app.models.schemas import WeekendVariantKind
+    from app.services.weekend import selected_weekend_variant, template_tuples
+    config = fixed_support_plan()
+    saturday = config.cycle_start_date + timedelta(days=5)
+    source = config.weekend_variants[0]
+    substitute = source.model_copy(deep=True, update={
+        "id": "SUB", "variant_kind": WeekendVariantKind.SUBSTITUTE, "position_in_cycle": None,
+        "replaces_weekend_rotation_variant_id": source.id, "applicable_week_number": 1,
+        "applicable_saturday_date": saturday, "applicable_sunday_date": saturday + timedelta(days=1),
+    })
+    config.weekend_variants.append(substitute)
+    config.required_assignments = [WorkAssignment(group_id="G1", educator_id="C", date=saturday,
+                                                  start_minute=1200, end_minute=1320)]
+    before = config.model_dump()
+    resolved = selected_weekend_variant(config, week_number=1, saturday=saturday, sunday=saturday + timedelta(days=1))
+    assert resolved.id == "SUB"
+    assert template_tuples(resolved.saturday_template)[-1] == (3, "C", 1200, 1320)
+    assert resolved.sunday_template == source.sunday_template
+    assert config.model_dump() == before
+
+
+def test_priority_never_resolves_two_conflicting_required_duties_silently():
+    config = fixed_support_plan()
+    config.required_assignments.append(config.required_assignments[0].model_copy(update={"educator_id": "A"}))
+    report = validate_configuration(config)
+    assert report.status == "INVALID_INPUT"
+    assert any("Dwa obowiązkowe dyżury" in m.message for m in report.messages)

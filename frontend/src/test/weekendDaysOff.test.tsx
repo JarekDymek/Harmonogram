@@ -16,6 +16,16 @@ function show() {
 }
 
 describe("stałe wolne za weekend", () => {
+  it("pokazuje pierwszeństwo stałego dyżuru bez nadpisania zapisanych wzorców", () => {
+    const config = migrateConfiguration(configurationFixture);
+    config.recurringRequiredDuties = [{id: "R", groupId: "G1", educatorId: "C", dayOfWeek: 5,
+      startTime: "20:00", endTime: "22:00", description: "Stały dyżur"}];
+    localStorage.setItem(key, JSON.stringify(config));
+    show();
+    expect(screen.getByRole("heading", {name: "Obowiązkowe dyżury mają pierwszeństwo"})).toBeVisible();
+    expect(screen.getByText(/2026-09-19, 20:00–22:00/)).toBeVisible();
+    expect(JSON.parse(localStorage.getItem(key)!).weekendVariants).toEqual(config.weekendVariants);
+  });
   it("zapisuje, przywraca i zmienia osobisty wzorzec bez zmiany godzin i weekendów", async () => {
     const original = migrateConfiguration(configurationFixture);
     localStorage.setItem(key, JSON.stringify(original));

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from time import monotonic
 from collections import defaultdict
 
 from app.domain import rules
@@ -60,11 +61,15 @@ def _diagnose_no_solution(
     jest publikowany.
     """
     educator_by_id = {item.id: item for item in configuration.educators}
+    deadline = monotonic() + min(6.0, configuration.solver_time_limit_seconds)
 
     def attempt(candidate: ScheduleConfiguration) -> bool:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return False
         candidate.solver_time_limit_seconds = min(
             3.0,
-            configuration.solver_time_limit_seconds,
+            remaining,
         )
         return _solve_once(candidate, care).status == GenerationStatus.CANDIDATE_FOUND
 
@@ -301,10 +306,9 @@ def generate_schedule(
                 error(
                     rules.RULE_NO_GUESSING,
                     (
-                        "Godziny tygodniowe są zbilansowane, ale obecnych "
-                        "niedostępności, weekendów, nocy, pięciu dni pracy i "
-                        "odpoczynków nie da się spełnić jednocześnie. Aplikacja "
-                        "nie zmieni żadnej z tych danych samodzielnie."
+                        "Generator odrzucił bieżący zestaw ograniczeń, ale nie ustalił konkretnego wpisu będącego przyczyną. "
+                        "To nie jest wskazanie błędnych godzin. Nie zmieniaj danych na chybił trafił; "
+                        "zapisz projekt w Eksport i import, aby można było odtworzyć problem."
                     ),
                     context={
                         "solverStatus": solver_result.solver_status_name,
@@ -333,9 +337,7 @@ def generate_schedule(
             care=input_report.care,
             conflict_report=ConflictReport(
                 summary=(
-                    "Nie zmieniaj wszystkich danych. Zacznij od pierwszej "
-                    "konkretnej pozycji wskazanej poniżej, a potem ponownie "
-                    "uruchom generowanie."
+                    "Sprawdź tylko potwierdzone kolizje. Jeśli nie wskazano konkretnego wpisu, potrzebna jest analiza projektu, nie losowe zmiany godzin."
                 ),
                 conflict_analysis_quality="APPROXIMATE",
                 conflicting_rule_ids=conflict_ids,

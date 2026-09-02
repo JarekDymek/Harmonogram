@@ -198,7 +198,7 @@ export function MessagesTable({
                 </div>
               )}
               <p className="message-card__destination">
-                <strong>Miejsce do poprawy:</strong> {guidance.destination}
+                <strong>{guidance.repairable === false ? "Co dalej:" : "Miejsce do poprawy:"}</strong> {guidance.destination}
               </p>
               <details className="message-details">
                 <summary>Szczegóły techniczne</summary>

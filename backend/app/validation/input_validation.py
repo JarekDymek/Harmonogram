@@ -40,6 +40,7 @@ from app.services.time_utils import (
 )
 from app.services.weekend import (
     base_variant,
+    fixed_support_educators,
     selected_weekend_variant,
     template_tuples,
     variant_working_educators,
@@ -651,12 +652,14 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
             continue
         variant = matches[0]
         working = variant_working_educators(variant)
-        if len(working) != 2 or not working.issubset(set(educator_ids)):
+        support = fixed_support_educators(configuration)
+        core_working = working - support
+        if len(core_working) != 2 or not working.issubset(set(educator_ids)):
             messages.append(
                 error(
                     rules.RULE_WEEKEND,
-                    "Każdy wariant weekendowy musi jawnie wskazywać dokładnie dwóch aktywnych wychowawców.",
-                    required="2 aktywnych wychowawców",
+                    "Wzorzec weekendu wymaga pary wychowawców; oprócz niej może zawierać stałe dyżury wychowawcy pomocniczego.",
+                    required="2 osoby w parze oraz opcjonalny stały pomocniczy",
                     actual=sorted(working),
                     context={"position": position},
                 )
@@ -669,12 +672,12 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
             item.educator_id
             for item in variant.sunday_template.assignments
         }
-        if saturday_workers != working or sunday_workers != working:
+        if saturday_workers - support != core_working or sunday_workers - support != core_working:
             messages.append(
                 error(
                     rules.RULE_WEEKEND,
-                    "Sobota i niedziela wariantu muszą wskazywać tę samą jawną parę.",
-                    required=sorted(working),
+                    "Sobota i niedziela wymagają tej samej pary. Stały pomocniczy może pracować tylko w jednym z tych dni.",
+                    required=sorted(core_working),
                     actual=f"{sorted(saturday_workers)} / {sorted(sunday_workers)}",
                     context={"position": position},
                 )
@@ -878,6 +881,8 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
         if item.variant_kind == WeekendVariantKind.SUBSTITUTE
     ):
         working = variant_working_educators(variant)
+        support = fixed_support_educators(configuration)
+        core_working = working - support
         saturday_workers = {
             item.educator_id
             for item in variant.saturday_template.assignments
@@ -887,16 +892,16 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
             for item in variant.sunday_template.assignments
         }
         if (
-            len(working) != 2
+            len(core_working) != 2
             or not working.issubset(set(educator_ids))
-            or saturday_workers != working
-            or sunday_workers != working
+            or saturday_workers - support != core_working
+            or sunday_workers - support != core_working
         ):
             messages.append(
                 error(
                     rules.RULE_WEEKEND,
-                    "Wariant SUBSTITUTE musi wskazywać tę samą jawną parę aktywnych wychowawców w sobotę i niedzielę.",
-                    required="dokładnie 2 aktywne osoby",
+                    "Wariant zastępczy wymaga tej samej pary w sobotę i niedzielę; stały pomocniczy może mieć dodatkowy odcinek w jednym dniu.",
+                    required="2 osoby w parze oraz opcjonalny stały pomocniczy",
                     actual=f"{sorted(saturday_workers)} / {sorted(sunday_workers)}",
                     context={"variantId": variant.id},
                 )

@@ -10,6 +10,21 @@ ograniczeń OR-Tools CP-SAT. Znaleziony kandydat jest publikowany dopiero po
 ponownym sprawdzeniu przez niezależny walidator. Frontend nie odtwarza logiki
 solvera ani reguł krytycznych.
 
+## Aktualna kolejność układania planu
+
+1. Obowiązkowy dyżur w internacie już zapewnia opiekę w podanych godzinach.
+2. Generator układa tylko pozostałą obsadę. Obowiązkowy dyżur ma pierwszeństwo
+   także przed wzorcem weekendowym; nie trzeba ręcznie skracać sześciu wzorców.
+3. Zapisane zapotrzebowanie i wymiary godzin nie są zmniejszane ani nadpisywane.
+   Godziny stałego dyżuru liczą się raz do obsady i wymiaru jego wychowawcy.
+4. Nie wolno naruszać dostępności, odpoczynków ani limitów dni pracy. Dwa
+   sprzeczne obowiązkowe dyżury pozostają błędem, nie rozstrzyga ich kolejność wpisu.
+5. Nieustalona przyczyna nie jest prezentowana jako gotowy „plan naprawy”.
+   Diagnostyka pomocnicza ma wspólny ograniczony budżet obliczeń.
+
+Dokumenty opisujące **pierwszą wersję / V1** są historyczne. Ich wykluczenie
+czwartego wychowawcy, stałych dyżurów, importu i eksportu nie opisuje obecnej aplikacji.
+
 > **Ważne:** dołączony profil prawny i wszystkie dane przykładowe mają status
 > `UNVERIFIED` oraz służą wyłącznie demonstracji. Nie wolno używać
 > demonstracyjnego wyniku do rzeczywistego planowania pracy. Tryb produkcyjny

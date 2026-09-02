@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { EmptyState, MessagesTable, PageHeader, StatusBadge } from "../components/UI";
 import { RepairGuide } from "../components/RepairGuide";
 import { useAppState } from "../state/AppState";
+import { getRuleGuidance } from "../help";
 
 export function NoSolutionPage() {
   const { configuration, generation } = useAppState();
@@ -14,16 +15,17 @@ export function NoSolutionPage() {
     );
   }
   const messages = generation?.messages ?? [];
-  const errors = messages.filter((message) => message.severity === "ERROR");
+  const errors = messages.filter((message) => message.severity === "ERROR"
+    && getRuleGuidance(message, configuration ?? undefined).repairable !== false);
   const remainingMessages = messages.filter(
-    (message) => message.severity !== "ERROR",
+    (message) => !errors.includes(message),
   );
   return (
     <>
       <PageHeader
         eyebrow="BRAK ROZWIĄZANIA"
         title="Nie udało się jeszcze ułożyć planu"
-        description="Nie zmieniaj wszystkich danych. Zacznij od pierwszej konkretnej wskazówki poniżej."
+        description={errors.length ? "Poniżej wskazano konkretne kolizje do uzgodnienia." : "Nie ustalono konkretnego wpisu do poprawy. Nie zmieniaj godzin ani reguł na chybił trafił."}
       />
       {errors.length > 0 ? (
         <RepairGuide
@@ -31,24 +33,24 @@ export function NoSolutionPage() {
           configuration={configuration ?? undefined}
           recheckTo="/podsumowanie"
         />
-      ) : (
+      ) : remainingMessages.length === 0 ? (
         <section className="next-step-card next-step-card--error">
           <div>
             <span className="eyebrow">CO ZROBIĆ TERAZ</span>
-            <h2>Sprawdź ograniczenia planu</h2>
+            <h2>Potrzebna jest analiza zapisanego projektu</h2>
             <p>{conflict.summary}</p>
           </div>
-          <Link className="button button--secondary" to="/podsumowanie">
-            Wróć do sprawdzenia danych
+          <Link className="button button--secondary" to="/urzadzenia">
+            Przejdź do eksportu projektu
           </Link>
         </section>
-      )}
+      ) : null}
       {remainingMessages.length > 0 && (
         <section className="section-block">
           <div className="section-heading">
             <div>
               <span className="eyebrow">DODATKOWE INFORMACJE</span>
-              <h2>Co jeszcze warto sprawdzić</h2>
+              <h2>Informacje o wyniku</h2>
             </div>
           </div>
           <MessagesTable

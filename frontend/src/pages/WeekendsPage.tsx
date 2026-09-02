@@ -4,6 +4,8 @@ import { EmptyState, PageHeader, StatusBadge } from "../components/UI";
 import { useAppState } from "../state/AppState";
 import type { WeekendVariant, WeekendDaysOffPattern } from "../types";
 import { WeekendDaysOffEditor, validDaysOff } from "../components/WeekendDaysOffEditor";
+import { prepareConfigurationForApi } from "../nightDuties";
+import { minutesToTime } from "../components/UI";
 
 export function WeekendsPage() {
   const { configuration, setConfiguration, inputReport } = useAppState();
@@ -73,6 +75,9 @@ export function WeekendsPage() {
     .filter((item) => item.variantKind === "BASE")
     .sort((a, b) => (a.positionInCycle ?? 0) - (b.positionInCycle ?? 0));
   const substitutes = variants.filter((item) => item.variantKind === "SUBSTITUTE");
+  const requiredWeekends = (prepareConfigurationForApi(configuration).requiredAssignments ?? []).filter(a =>
+    a.groupId === configuration.activeGroupId && [0, 6].includes(new Date(`${a.date}T12:00:00Z`).getUTCDay()));
+  const educatorName = (id: string) => groupEducators.find(e => e.id === id)?.displayName ?? id;
 
   const updateAssignment = (
     variantId: string,
@@ -170,6 +175,15 @@ export function WeekendsPage() {
         }
       />
       {saveMessage && <p role="status">{saveMessage}</p>}
+      {requiredWeekends.length > 0 && (
+        <section className="section-block" id="staly-plan-weekend">
+          <h2>Obowiązkowe dyżury mają pierwszeństwo</h2>
+          <p>Poniższe godziny są już obsadzone. Generator wyłączy je z przydziałów rotacji i ułoży resztę opieki wokół nich. Nie musisz skracać wzorców ręcznie. Wymiary tygodniowe pozostają bez zmian.</p>
+          <ul>{requiredWeekends.map((duty, i) => (
+            <li key={i}>{duty.date}, {minutesToTime(duty.startMinute)}–{minutesToTime(duty.endMinute)}: {educatorName(duty.educatorId)}</li>
+          ))}</ul>
+        </section>
+      )}
       <WeekendDaysOffEditor educators={groupEducators} patterns={daysOffPatterns}
         messages={inputReport?.messages ?? []} onChange={patterns => {
           setDaysOffPatterns(patterns); setSaveMessage("Niezapisane zmiany — kliknij Zapisz wzorce.");

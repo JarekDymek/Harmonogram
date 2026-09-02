@@ -6,6 +6,15 @@ import { RepairGuide } from "../components/RepairGuide";
 import { MessagesTable, Timeline } from "../components/UI";
 
 describe("komponenty raportowe", () => {
+  it("nie udaje planu naprawy, gdy nie ustalono przyczyny", () => {
+    const message = {ruleId: "REQ-NO-GUESSING-001", severity: "ERROR" as const,
+      message: "Nie ustalono konkretnego wpisu będącego przyczyną.", context: {conflictType: "COMBINED_HARD_RULES"}};
+    render(<MemoryRouter><RepairGuide messages={[message]} /><MessagesTable messages={[message]} /></MemoryRouter>);
+    expect(screen.queryByText("PLAN NAPRAWY KROK PO KROKU")).not.toBeInTheDocument();
+    expect(screen.getByText(message.message, {selector: ".message-card__heading p"})).toBeVisible();
+    expect(screen.queryByText("Miejsce do poprawy:")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", {name: "Przejdź do eksportu projektu"})).toHaveAttribute("href", "/urzadzenia");
+  });
   it("pokazuje prostą instrukcję i link do naprawy", () => {
     render(
       <MemoryRouter>
