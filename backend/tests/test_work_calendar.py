@@ -156,8 +156,15 @@ def test_legacy_group_ids_do_not_bypass_mandatory_validation():
     assert "REQ-REQUIRED-DUTY-001" in {m.rule_id for m in validate_schedule(config, []).messages}
 
 
-def test_fixed_support_plan_keeps_manual_hours_and_does_not_require_five_local_days():
+@pytest.mark.parametrize("weeks", [1, 6])
+def test_fixed_support_plan_keeps_manual_hours_and_does_not_require_five_local_days(weeks):
     config = fixed_support_plan()
+    config.planning_horizon_weeks = weeks
+    duties = list(config.required_assignments)
+    config.required_assignments = [
+        duty.model_copy(update={"date": duty.date + timedelta(weeks=week)})
+        for week in range(weeks) for duty in duties
+    ]
     before = config.model_dump()
 
     result = generate_schedule(config)
@@ -166,11 +173,36 @@ def test_fixed_support_plan_keeps_manual_hours_and_does_not_require_five_local_d
     assert result.validation_report.status == "VALID"
     assert result.validation_report.validator_version == "3.1.0"
     assert config.model_dump() == before
-    helper = [item for item in result.assignments if item.educator_id == "D"]
-    assert sum(item.end_minute - item.start_minute for item in helper) == 12 * 60
-    assert {item.date.weekday() for item in helper} == {1, 3}
-    for educator_id in ("A", "B", "C"):
-        assert len({item.date for item in result.assignments if item.educator_id == educator_id}) == 5
+    for week in range(weeks):
+        assignments = [item for item in result.assignments
+                       if (item.date - config.cycle_start_date).days // 7 == week]
+        helper = [item for item in assignments if item.educator_id == "D"]
+        assert sum(item.end_minute - item.start_minute for item in helper) == 12 * 60
+        assert {item.date.weekday() for item in helper} == {1, 3}
+        assert all(item.start_minute == 840 and item.end_minute == 1200 for item in helper)
+        for educator_id in ("A", "B", "C"):
+            assert len({item.date for item in assignments if item.educator_id == educator_id}) == 5
+
+
+def test_external_occupancy_handles_both_folds_and_empty_dst_slots():
+    from app.solver.internat_solver import _fixed_occupancy
+    config = fixed_support_plan()
+    target = datetime(2026, 10, 25).date()
+    assert not _fixed_occupancy(config, "D", target, 4)
+    config.external_duty_assignments = [ExternalDutyAssignment(
+        id="DST", educator_id="D", duty_type="OTHER",
+        start_date_time=datetime.fromisoformat("2026-10-25T02:45:00+02:00"),
+        end_date_time=datetime.fromisoformat("2026-10-25T02:15:00+01:00"),
+    )]
+    assert _fixed_occupancy(config, "D", target, 4)
+    assert _fixed_occupancy(config, "D", target, 5)
+    assert not _fixed_occupancy(config, "D", target, 6)
+
+
+def test_internal_grid_rest_uses_shorter_dst_interpretation():
+    from app.solver.internat_solver import _grid_rest_minutes
+    assert _grid_rest_minutes(datetime(2026, 10, 24).date(), 22 * 60,
+                              datetime(2026, 10, 25).date(), 150, "Europe/Warsaw") == 270
 
 
 def test_fixed_support_plan_requires_all_hours_to_be_entered_manually():

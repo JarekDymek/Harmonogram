@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, time, timedelta
 from math import ceil
 
 from ortools.sat.python import cp_model
@@ -22,7 +22,7 @@ from app.models.schemas import (
     WorkAssignment,
 )
 from app.services.time_utils import (
-    aware_local_datetime,
+    TimeDomainError,
     elapsed_minutes,
     interval_slots,
     normalize_pairs,
@@ -72,6 +72,7 @@ def _fixed_occupancy(
     educator_id: str,
     target_date,
     slot: int,
+    external_slots=None,
 ) -> bool:
     step = configuration.organizational_rules.time_step_minutes
     slot_start = slot * step
@@ -85,22 +86,45 @@ def _fixed_occupancy(
             and slot_start < assignment.end_minute
         ):
             return True
-    slot_start_dt = aware_local_datetime(
-        target_date,
-        slot_start,
-        configuration.time_zone_id,
-    )
-    slot_end_dt = aware_local_datetime(
-        target_date,
-        slot_end,
-        configuration.time_zone_id,
-    )
+    if external_slots is None:
+        external_slots = _external_occupancy_slots(configuration)
+    return slot in external_slots.get((educator_id, target_date), set())
+
+
+def _external_occupancy_slots(configuration):
+    """Project actual duty instants onto the local grid, including both DST folds."""
+    occupied = defaultdict(set)
+    tz = zone(configuration.time_zone_id)
+    step = configuration.organizational_rules.time_step_minutes
     for duty in configuration.external_duty_assignments:
-        if duty.educator_id != educator_id or not duty.locked:
+        if not duty.locked:
             continue
-        if duty.start_date_time < slot_end_dt and slot_start_dt < duty.end_date_time:
-            return True
-    return False
+        cursor = duty.start_date_time.astimezone(UTC).replace(second=0, microsecond=0)
+        end = duty.end_date_time.astimezone(UTC)
+        while cursor < end:
+            local = cursor.astimezone(tz)
+            occupied[(duty.educator_id, local.date())].add(
+                (local.hour * 60 + local.minute) // step
+            )
+            cursor += timedelta(minutes=1)
+    return occupied
+
+
+def _grid_rest_minutes(start_date, start_minute, end_date, end_minute, time_zone_id):
+    """Use the shortest possible rest at an internal ambiguous grid boundary.
+
+    User-entered boundaries still go through strict input validation. The model
+    also contains unused night slots; those must not crash a daytime schedule.
+    """
+    try:
+        return elapsed_minutes(start_date, start_minute, end_date, end_minute, time_zone_id)
+    except TimeDomainError:
+        tz = zone(time_zone_id)
+        start = datetime.combine(start_date, time()) + timedelta(minutes=start_minute)
+        end = datetime.combine(end_date, time()) + timedelta(minutes=end_minute)
+        latest_start = max(start.replace(tzinfo=tz, fold=f).astimezone(UTC) for f in (0, 1))
+        earliest_end = min(end.replace(tzinfo=tz, fold=f).astimezone(UTC) for f in (0, 1))
+        return int((earliest_end - latest_start).total_seconds() // 60)
 
 
 def _fixed_workday(
@@ -258,10 +282,14 @@ def solve_internat_schedule(
     global_x: dict[tuple[int, int, int], cp_model.IntVar] = {}
     occupied_x: dict[tuple[int, int, int], cp_model.IntVar] = {}
     fixed_slots: set[tuple[int, int, int]] = set()
+    external_slots = _external_occupancy_slots(configuration)
+    possible_slots = defaultdict(set)
     for index, educator in enumerate(educators):
         for day_index, target_date in enumerate(dates):
             for slot in range(rules.SLOTS_PER_DAY):
                 assigned = by_educator_day_slot[(index, day_index, slot)]
+                if assigned:
+                    possible_slots[day_index].add(slot)
                 global_value = model.new_bool_var(
                     f"global_{index}_{day_index}_{slot}"
                 )
@@ -276,7 +304,9 @@ def solve_internat_schedule(
                     educator.id,
                     target_date,
                     slot,
+                    external_slots,
                 ):
+                    possible_slots[day_index].add(slot)
                     fixed_slots.add((index, day_index, slot))
                     model.add(global_value == 0)
                     model.add(occupied == 1)
@@ -536,9 +566,9 @@ def solve_internat_schedule(
             if same_night_block(configuration, educator.id, dates[day_index],
                                 1200, next_date, 480)
         }
-        for current_slot in range(rules.SLOTS_PER_DAY):
-            for next_slot in range(rules.SLOTS_PER_DAY):
-                rest = elapsed_minutes(
+        for current_slot in sorted(possible_slots[day_index]):
+            for next_slot in sorted(possible_slots[next_day_index]):
+                rest = _grid_rest_minutes(
                     dates[day_index],
                     (current_slot + 1) * step,
                     next_date,
