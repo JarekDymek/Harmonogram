@@ -259,7 +259,7 @@ def _diagnose_no_solution(
                     rules.RULE_DAYS,
                     (
                         "Suma godzin jest poprawna, ale nie da się jej rozłożyć "
-                        "na dokładnie pięć dni pracy każdej osoby przy obecnych "
+                        "na dokładnie pięć dni pracy osób podstawowych i stały plan osoby pomocniczej przy obecnych "
                         "nockach, weekendach i niedostępności. Sprawdź osobę z "
                         "największą liczbą zablokowanych dni."
                     ),

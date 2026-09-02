@@ -17,7 +17,7 @@ export function ValidationPage() {
       </EmptyState>
     );
   }
-  if (report.validatorVersion !== VALIDATOR_VERSION) return <EmptyState title="Poprzedni wynik wymaga ponownego sprawdzenia">Dane zachowano. W Harmonogramie uruchom generator: sprawdzi dokładnie pięć dni pracy, obie daty nocki, szkołę oraz stałe dni wolne za weekend.</EmptyState>;
+  if (report.validatorVersion !== VALIDATOR_VERSION) return <EmptyState title="Poprzedni wynik wymaga ponownego sprawdzenia">Dane zachowano. W Harmonogramie uruchom generator: sprawdzi pięć dni osób podstawowych, stały plan pomocniczy, obie daty nocki, szkołę oraz stałe dni wolne za weekend.</EmptyState>;
   return (
     <>
       <PageHeader

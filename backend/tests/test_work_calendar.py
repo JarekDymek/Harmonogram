@@ -32,6 +32,36 @@ def four_people():
     return config
 
 
+def fixed_support_plan():
+    config = demo_configuration()
+    config.educator_count = 4
+    config.educators.append(Educator(id="D", display_name="Wychowawca pomocniczy", short_code="D"))
+    hours = {"A": 23.5, "B": 23.5, "C": 23, "D": 12}
+    config.group_memberships = [
+        GroupEducatorMembership(
+            id=f"M-{educator_id}",
+            group_id="G1",
+            educator_id=educator_id,
+            role="SUPPORT" if educator_id == "D" else "PRIMARY",
+            weekly_target_hours_by_week=[hours[educator_id]],
+            fixed_partial_schedule=educator_id == "D",
+        )
+        for educator_id in hours
+    ]
+    config.required_assignments = [
+        WorkAssignment(
+            group_id="G1",
+            educator_id="D",
+            date=config.cycle_start_date + timedelta(days=day),
+            start_minute=840,
+            end_minute=1200,
+        )
+        for day in (1, 3)
+    ]
+    config.solver_time_limit_seconds = 30
+    return config
+
+
 @pytest.mark.parametrize("day", range(7))
 def test_night_protects_both_dates_on_every_weekday(day):
     config = demo_configuration()
@@ -124,3 +154,38 @@ def test_legacy_group_ids_do_not_bypass_mandatory_validation():
     for educator in config.educators: educator.group_id = "G1"
     config.required_assignments = [WorkAssignment(group_id="G1", educator_id="B", date=config.cycle_start_date, start_minute=360, end_minute=480)]
     assert "REQ-REQUIRED-DUTY-001" in {m.rule_id for m in validate_schedule(config, []).messages}
+
+
+def test_fixed_support_plan_keeps_manual_hours_and_does_not_require_five_local_days():
+    config = fixed_support_plan()
+    before = config.model_dump()
+
+    result = generate_schedule(config)
+
+    assert result.generation_status == "CANDIDATE_FOUND", result.messages
+    assert result.validation_report.status == "VALID"
+    assert result.validation_report.validator_version == "3.1.0"
+    assert config.model_dump() == before
+    helper = [item for item in result.assignments if item.educator_id == "D"]
+    assert sum(item.end_minute - item.start_minute for item in helper) == 12 * 60
+    assert {item.date.weekday() for item in helper} == {1, 3}
+    for educator_id in ("A", "B", "C"):
+        assert len({item.date for item in result.assignments if item.educator_id == educator_id}) == 5
+
+
+def test_fixed_support_plan_requires_all_hours_to_be_entered_manually():
+    config = fixed_support_plan()
+    config.required_assignments.pop()
+
+    report = validate_configuration(config)
+
+    message = next(
+        item
+        for item in report.messages
+        if item.context.get("conflictType") == "FIXED_PARTIAL_SCHEDULE_HOURS"
+    )
+    assert report.status == "INVALID_INPUT"
+    assert message.educator_id == "D"
+    assert message.required_value == 12 * 60
+    assert message.actual_value == 6 * 60
+    assert "obowiązkowe dyżury" in message.message

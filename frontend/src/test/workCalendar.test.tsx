@@ -36,11 +36,12 @@ describe("wspólny kalendarz pracy", () => {
   });
 
   it("rozwija obowiązkowy dyżur i szkołę bez doliczania szkoły do godzin grupy", () => {
-    const config = migrateConfiguration({...configurationFixture,planningHorizonWeeks:2,
+    const config = migrateConfiguration({...configurationFixture,planningHorizonWeeks:6,
       recurringRequiredDuties:[recurring],recurringSchoolWork:[{...recurring,id:"S",startTime:"08:10",endTime:"13:45"}]});
     const api = prepareConfigurationForApi(config);
-    expect(api.requiredAssignments).toHaveLength(2);
+    expect(api.requiredAssignments).toHaveLength(6);
     expect(api.requiredAssignments?.[0]).toMatchObject({date:"2026-09-16",startMinute:360,endMinute:480,educatorId:"A"});
+    expect(api.requiredAssignments?.[5]).toMatchObject({date:"2026-10-21",startMinute:360,endMinute:480,educatorId:"A"});
     expect(api.externalDutyAssignments[0]).toMatchObject({dutyType:"SCHOOL",countsTowardsHours:false,startDateTime:"2026-09-16T06:10:00.000Z"});
     expect(api).not.toHaveProperty("recurringSchoolWork");
     expect(api).not.toHaveProperty("recurringRequiredDuties");
@@ -63,10 +64,10 @@ describe("wspólny kalendarz pracy", () => {
     localStorage.setItem(key,JSON.stringify(old));
     localStorage.setItem("harmonogram-mow-generation-v3",JSON.stringify(previousResult));
     render(<MemoryRouter><AppStateProvider><App /></AppStateProvider></MemoryRouter>);
-    const backup = JSON.parse(localStorage.getItem(`${key}-before-work-calendar-v3-TEST`)!);
+    const backup = JSON.parse(localStorage.getItem(`${key}-before-work-calendar-v4-TEST`)!);
     expect(backup.configuration).toEqual(old);
     expect(backup.generation).toEqual(previousResult);
-    expect(JSON.parse(localStorage.getItem(key)!).workRulesVersion).toBe(3);
+    expect(JSON.parse(localStorage.getItem(key)!).workRulesVersion).toBe(4);
   });
 
   it("brak miejsca na kopię nie nadpisuje oryginalnych danych", () => {
@@ -100,6 +101,43 @@ describe("wspólny kalendarz pracy", () => {
     await user.click(area.getByRole("button",{name:"Zapisz poprawione godziny"}));
     expect(JSON.parse(localStorage.getItem(key)!).recurringRequiredDuties).toHaveLength(1);
     expect(JSON.parse(localStorage.getItem(key)!).recurringRequiredDuties[0].dayOfWeek).toBe(3);
+  });
+
+  it("pozwala jawnie oznaczyć czwartą osobę jako stały plan pomocniczy", async () => {
+    const config = migrateConfiguration({
+      ...configurationFixture,
+      educatorCount: 4,
+      educators: [
+        ...configurationFixture.educators,
+        {
+          ...configurationFixture.educators[0],
+          id: "D",
+          displayName: "Wychowawca pomocniczy",
+          shortCode: "D",
+        },
+      ],
+      groupMemberships: [
+        ...configurationFixture.groupMemberships,
+        {
+          ...configurationFixture.groupMemberships[0],
+          id: "MEM-G1-D",
+          educatorId: "D",
+          role: "SUPPORT",
+          weeklyTargetHoursByWeek: [12],
+          fixedPartialSchedule: false,
+        },
+      ],
+    });
+    localStorage.setItem(key, JSON.stringify(config));
+    render(<MemoryRouter initialEntries={["/wychowawcy"]}><AppStateProvider><App /></AppStateProvider></MemoryRouter>);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("checkbox", { name: /Stały plan pomocniczy/ }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem(key)!);
+      expect(saved.groupMemberships.find((item: { educatorId: string }) => item.educatorId === "D").fixedPartialSchedule).toBe(true);
+    });
   });
 
   it("prowadzi do obowiązkowego dyżuru zamiast do ogólnej pomocy", () => {

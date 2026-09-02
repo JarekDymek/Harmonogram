@@ -2,7 +2,7 @@ import type { ScheduleConfiguration } from "../types";
 
 export const configurationFixture: ScheduleConfiguration = {
   schemaVersion: 3,
-  workRulesVersion: 3,
+  workRulesVersion: 4,
   projectId: "TEST",
   projectName: "Testowy harmonogram",
   configurationVersionId: "CV-TEST",

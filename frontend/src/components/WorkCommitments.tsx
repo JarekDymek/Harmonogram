@@ -32,10 +32,10 @@ function CommitmentForm({ school }: { school: boolean }) {
     setForm({ ...form, startTime: "", endTime: "" });
   };
   return <section className="section-block" id={school ? "szkola" : "stale-dyzury"}>
-    <div className="section-heading"><div><span className="eyebrow">CO TYDZIEŃ · DO USUNIĘCIA</span><h2>{title}</h2></div></div>
+    <div className="section-heading"><div><span className="eyebrow">CO TYDZIEŃ · DO ODWOŁANIA</span><h2>{title}</h2></div></div>
     <p className="section-copy">{school
       ? "Wpisz rzeczywiste godziny lekcji/pracy, nie liczbę godzin lekcyjnych. To dzień pracy, nie wolne. Szkoła nie zwiększa wymiaru internatu. Generator preferuje internat w już zajęte dni, o ile pozwalają odpoczynki i potrzeby grupy."
-      : "Odwrotność niedostępności: w tych godzinach ta osoba musi być na grupie. Dyżur wykorzystuje jej wpisany wymiar, nie dodaje nadgodzin. Przykład: środa 06:00–08:00 po nocce."}</p>
+      : "Odwrotność niedostępności: w tych godzinach ta osoba musi być na grupie. Dyżur wykorzystuje jej wpisany wymiar, nie dodaje nadgodzin. Dla osoby oznaczonej wyżej jako „Stały plan pomocniczy” wpisz tutaj cały jej tygodniowy wymiar — generator nie dopisze jej innych godzin i powtórzy ten układ przez wszystkie tygodnie."}</p>
     <form className="inline-form" onSubmit={submit}>
       <label>Wychowawca<select aria-label={`${title}: wychowawca`} required value={form.educatorId} onChange={e => setForm({ ...form, educatorId: e.target.value })}><option value="">Wybierz</option>{people.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}</select></label>
       <label>Dzień<select aria-label={`${title}: dzień`} value={form.dayOfWeek} onChange={e => setForm({ ...form, dayOfWeek: Number(e.target.value) })}>{WEEKDAY_NAMES.map((d, i) => <option key={d} value={i}>{d}</option>)}</select></label>

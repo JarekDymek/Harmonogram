@@ -94,7 +94,7 @@ export function SchedulePage() {
           eyebrow="KROK 08 · WYNIK"
           title={stale ? "Przelicz plan według nowych zasad dni pracy" : title}
           description={
-            stale ? "Dane i poprzedni wynik zachowano. Nowa kontrola wymaga dokładnie 5 dni pracy łącznie ze szkołą i obiema datami nocki oraz przestrzegania zapisanego wolnego za weekend. Kliknij Uruchom generator. Nie trzeba wpisywać danych ponownie." : hasAttempt
+            stale ? "Dane i poprzedni wynik zachowano. Nowa kontrola wymaga dokładnie 5 dni pracy osób podstawowych, uwzględnia stały plan pomocniczy, szkołę, obie daty nocki i zapisane wolne za weekend. Kliknij Uruchom generator. Nie trzeba wpisywać danych ponownie." : hasAttempt
               ? "Nie masz jeszcze sprawdzonego planu. Brak wyniku nie oznacza błędu godzin — poniżej podajemy rzeczywistą przyczynę."
               : "Aplikacja najpierw ułoży propozycję spełniającą wymagane warunki, a następnie niezależnie ją sprawdzi."
           }
@@ -160,6 +160,11 @@ export function SchedulePage() {
   );
   const weekSummary = groupEducators.map((educator) => {
     const relevant = assignments.filter((item) => item.educatorId === educator.id);
+    const membership = configuration.groupMemberships.find(
+      (item) =>
+        item.educatorId === educator.id &&
+        item.groupId === configuration.activeGroupId,
+    )!;
     return {
       educator,
       minutes: relevant.reduce(
@@ -167,7 +172,8 @@ export function SchedulePage() {
         0,
       ),
       days: allWorkDates(educator.id).size,
-      nightMinutes: fixedNightHours(configuration, configuration.groupMemberships.find(m => m.educatorId === educator.id && m.groupId === configuration.activeGroupId)!, week - 1) * 60,
+      nightMinutes: fixedNightHours(configuration, membership, week - 1) * 60,
+      fixedPartialSchedule: membership.fixedPartialSchedule ?? false,
       splitDays: weekDates.filter(
         (date) =>
           relevant.filter((item) => item.date === date).length > 1,
@@ -391,7 +397,9 @@ export function SchedulePage() {
                 <strong>{formatMinutes(item.minutes + item.nightMinutes)}</strong>
                 <small>Opieka {formatMinutes(item.minutes)} + stałe nocki {formatMinutes(item.nightMinutes)}</small>
                 <span>
-                  {item.days} dni pracy łącznie · {7 - item.days} całkowicie wolnych
+                  {item.fixedPartialSchedule
+                    ? `${item.days} dni w tym planie · pozostała praca poza zakresem`
+                    : `${item.days} dni pracy łącznie · ${7 - item.days} całkowicie wolnych`}
                 </span>
               </div>
             </div>
