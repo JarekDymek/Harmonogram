@@ -54,12 +54,6 @@ def _active_unavailability(item, target_date, week_number: int) -> bool:
     return item.date == target_date
 
 
-def _membership_minutes(membership, week_number: int) -> int:
-    values = membership.weekly_target_hours_by_week
-    value = values[week_number - 1] if week_number <= len(values) else values[-1]
-    return int(round(value * 60))
-
-
 def _care_blocks(day: CalculatedCareDay, step: int) -> list[list[int]]:
     return [
         list(range(item.start_minute // step, item.end_minute // step))

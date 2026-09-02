@@ -12,6 +12,7 @@ export interface PageHelp {
 }
 
 export interface RuleGuidance {
+  repairable?: boolean;
   title: string;
   explanation: string;
   destination: string;
@@ -233,6 +234,16 @@ export function getRuleGuidance(
   configuration?: ScheduleConfiguration,
 ): RuleGuidance {
   const ruleId = message.ruleId;
+  if (contextString(message, "conflictType") === "COMBINED_HARD_RULES") {
+    return {
+      repairable: false,
+      title: "Nie ustalono konkretnej przyczyny braku planu",
+      explanation: message.message,
+      destination: "Eksport i import → zapisz projekt do sprawdzenia",
+      actionLabel: "Przejdź do eksportu projektu",
+      actionTo: "/urzadzenia",
+    };
+  }
   if (ruleId === "REQ-WEEKEND-DAYS-OFF-001") {
     const patternId = contextString(message, "patternId");
     const groupId = configuration?.groupMemberships.find(m => m.active && m.educatorId === message.educatorId)?.groupId;
@@ -511,12 +522,12 @@ export function getRuleGuidance(
   }
 
   return {
-    title: "Sprawdź wskazane dane",
-    explanation:
-      "Aplikacja wykryła pozycję wymagającą uwagi. Otwórz szczegóły techniczne, a następnie popraw wskazany formularz.",
-    destination: "Podsumowanie → szczegóły komunikatu",
-    actionLabel: "Wróć do podsumowania",
-    actionTo: "/podsumowanie",
+    repairable: false,
+    title: "Komunikat wymagający sprawdzenia",
+    explanation: message.message,
+    destination: "Nie wskazano pola do poprawy. Nie zmieniaj danych na chybił trafił.",
+    actionLabel: "Przejdź do eksportu projektu",
+    actionTo: "/urzadzenia",
   };
 }
 
@@ -525,6 +536,7 @@ export function getRepairOptions(
   configuration?: ScheduleConfiguration,
 ): RepairOption[] {
   const guidance = getRuleGuidance(message, configuration);
+  if (guidance.repairable === false) return [];
   const primary: RepairOption = {
     label: guidance.actionLabel,
     description:

@@ -4,6 +4,7 @@ from datetime import date
 
 from app.models.schemas import (
     ScheduleConfiguration,
+    WeekendAssignmentTemplate,
     WeekendDayTemplate,
     WeekendRotationVariant,
     WeekendVariantKind,
@@ -60,7 +61,36 @@ def selected_weekend_variant(
         raise ValueError(
             f"Dla weekendu {saturday}–{sunday} istnieje więcej niż jeden SUBSTITUTE."
         )
-    return substitutes[0] if substitutes else base
+    selected = substitutes[0] if substitutes else base
+    updates = {}
+    for field, target_date in (("saturday_template", saturday), ("sunday_template", sunday)):
+        template = getattr(selected, field)
+        required = [a for a in configuration.required_assignments
+                    if a.group_id == configuration.group_id and a.date == target_date]
+        if not required:
+            continue
+        # A required care duty already covers demand. It takes precedence over
+        # rotation; keep the saved rotation intact and resolve a working copy.
+        step = configuration.organizational_rules.time_step_minutes
+        owners = {minute: educator for _, educator, start, end in template_tuples(template)
+                  for minute in range(start, end, step)}
+        for duty in required:
+            for minute in range(duty.start_minute, duty.end_minute, step):
+                if minute in owners:
+                    owners[minute] = duty.educator_id
+        segments = []
+        for minute, educator in sorted(owners.items()):
+            if segments and segments[-1][0] == educator and segments[-1][2] == minute:
+                segments[-1] = (educator, segments[-1][1], minute + step)
+            else:
+                segments.append((educator, minute, minute + step))
+        updates[field] = template.model_copy(update={"assignments": [
+            WeekendAssignmentTemplate(id=f"RESOLVED-{template.id}-{index}", educator_id=educator,
+                                      start_time=f"{start // 60:02d}:{start % 60:02d}",
+                                      end_time=f"{end // 60:02d}:{end % 60:02d}", sequence_number=index)
+            for index, (educator, start, end) in enumerate(segments, start=1)
+        ]})
+    return selected.model_copy(update=updates) if updates else selected
 
 
 def template_tuples(
@@ -82,4 +112,12 @@ def variant_working_educators(variant: WeekendRotationVariant) -> set[str]:
         item.educator_id
         for template in (variant.saturday_template, variant.sunday_template)
         for item in template.assignments
+    }
+
+
+def fixed_support_educators(configuration: ScheduleConfiguration) -> set[str]:
+    return {
+        item.educator_id for item in configuration.group_memberships
+        if item.active and item.group_id == configuration.group_id
+        and item.role == "SUPPORT" and item.fixed_partial_schedule
     }

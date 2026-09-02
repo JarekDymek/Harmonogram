@@ -27,9 +27,9 @@ export function RepairGuide({
   recheckTo?: string;
 }) {
   const actionable = useMemo(() => {
-    const errors = messages.filter((message) => message.severity === "ERROR");
-    return errors.length > 0 ? errors : messages;
-  }, [messages]);
+    return messages.filter(message => message.severity === "ERROR"
+      && getRuleGuidance(message, configuration).repairable !== false);
+  }, [messages, configuration]);
   const issueFingerprint = actionable.map(messageKey).join("|");
   const [stepIndex, setStepIndex] = useState(0);
 
