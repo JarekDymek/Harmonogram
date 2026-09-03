@@ -15,6 +15,7 @@ import { isValidatedPlan } from "../generation";
 import { VALIDATOR_VERSION } from "../workRules";
 import { calendarDuties, fixedNightHours } from "../nightDuties";
 import { WordExport } from "../components/WordExport";
+import { generatedGroups } from "../groupScope";
 
 function educatorColor(educatorId: string) {
   let hash = 0;
@@ -49,6 +50,13 @@ export function SchedulePage() {
   }, [configuration, week]);
 
   if (!configuration) return <EmptyState>Najpierw utwórz konfigurację.</EmptyState>;
+
+  if (isValidatedPlan(generation) && !generatedGroups(generation).includes(configuration.activeGroupId)) {
+    return <section className="section-block">
+      <h1>Ta grupa nie ma jeszcze wygenerowanego planu</h1>
+      <p>Zapisany harmonogram dotyczy innych grup. Wpisana nocka jest ustawieniem, nie gotowym planem opieki tej grupy.</p>
+    </section>;
+  }
 
   const run = async () => {
     const result = await generate({
@@ -179,7 +187,7 @@ export function SchedulePage() {
       <PageHeader
         eyebrow="KROK 08 · WYNIK"
         title={`Harmonogram grupy ${configuration.groupName}`}
-        description="Szczegół wybranej grupy; kontrola kolizji i odpoczynków została wykonana globalnie dla całego internatu."
+        description="Wynik dla wybranej grupy. Kontrola obejmuje grupy zapisane w wyniku oraz znane obowiązkowe zajęcia wspólnych wychowawców."
         actions={
           <div className="button-row">
             <button className="button button--secondary" type="button" onClick={() => navigate("/internat")}>Cały internat</button>

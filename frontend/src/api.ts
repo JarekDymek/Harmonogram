@@ -8,6 +8,7 @@ import { prepareConfigurationForApi } from "./nightDuties";
 const API_BASE_URL_KEY = "harmonogram-mow-api-base-url-v1";
 
 export interface GenerationOptions {
+  groupIds?: string[];
   optimize?: boolean;
   timeLimitSeconds?: number;
 }

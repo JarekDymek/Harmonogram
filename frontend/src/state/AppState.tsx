@@ -11,6 +11,7 @@ import {
 import { api, type GenerationOptions } from "../api";
 import { migrateWorkCalendar } from "../nightDuties";
 import { WORK_RULES_VERSION } from "../workRules";
+import { generatedGroups, planInputs } from "../groupScope";
 import { isBetterPlan, isValidatedPlan } from "../generation";
 import type {
   GenerateResponse,
@@ -31,6 +32,7 @@ interface AppStateValue {
   inputReport: InputReport | null;
   generation: GenerateResponse | null;
   generationNotice: string | null;
+  generationAttempt: GenerateResponse | null;
   busy: boolean;
   error: string | null;
   migrationPending: boolean;
@@ -41,6 +43,7 @@ interface AppStateValue {
     result: GenerateResponse | null,
   ) => void;
   setActiveGroup: (groupId: string) => void;
+  setSelectedGroups: (groupIds: string[]) => void;
   clearError: () => void;
   loadDemo: () => Promise<ScheduleConfiguration>;
   startNew: () => Promise<ScheduleConfiguration>;
@@ -131,9 +134,7 @@ export function migrateConfiguration(
     groups,
     activeGroupId,
     selectedGroupIds:
-      copy.selectedGroupIds?.filter((id) =>
-        activeGroups.some((group) => group.id === id),
-      ).length
+      Array.isArray(copy.selectedGroupIds)
         ? copy.selectedGroupIds.filter((id) =>
             activeGroups.some((group) => group.id === id),
           )
@@ -214,6 +215,7 @@ function restoreInitialConfiguration(): {
 }
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
+  const [generationAttempt, setGenerationAttempt] = useState<GenerateResponse | null>(null);
   const [initial] = useState(restoreInitialConfiguration);
   const [configuration, setConfigurationState] =
     useState<ScheduleConfiguration | null>(initial.configuration);
@@ -254,6 +256,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [generation]);
 
   const invalidateResults = useCallback(() => {
+    setGenerationAttempt(null);
     setInputReport(null);
     setGeneration(null);
     setGenerationNotice(null);
@@ -263,11 +266,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const setConfiguration = useCallback(
     (value: ScheduleConfiguration) => {
       if (initial.storageError) { setError(initial.storageError); return; }
-      setConfigurationState(migrateConfiguration(value));
+      const next = migrateConfiguration(value);
+      const scope = generatedGroups(generation);
+      const preserve = configuration && isValidatedPlan(generation)
+        && planInputs(configuration, scope) === planInputs(next, scope);
+      if (isValidatedPlan(generation) && !preserve) {
+        try {
+          localStorage.setItem("harmonogram-before-plan-edit-v1", JSON.stringify({
+            configuration, generation, inputReport, savedAt: new Date().toISOString(),
+          }));
+        } catch { setError("Nie zapisano zmian: nie można zabezpieczyć poprzedniego planu. Pobierz projekt w Eksport i import."); return; }
+      }
+      setConfigurationState(next);
       setMigrationPending(false);
-      invalidateResults();
+      setGenerationAttempt(null);
+      if (preserve) { setInputReport(null); setError(null); }
+      else invalidateResults();
     },
-    [invalidateResults],
+    [invalidateResults, configuration, generation, inputReport],
   );
 
   const importProject = useCallback(
@@ -282,6 +298,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
       setConfigurationState(migrateConfiguration(value));
       setMigrationPending(false);
+      setGenerationAttempt(null);
       setInputReport(report);
       setGeneration(result);
       setGenerationNotice(
@@ -316,6 +333,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  const setSelectedGroups = useCallback((ids: string[]) => {
+    if (!configuration || busy) return;
+    setConfiguration({...configuration, selectedGroupIds: [...new Set(ids)].filter(id =>
+      configuration.groups.some(g => g.id === id && g.active))});
+  }, [configuration, busy, setConfiguration]);
 
   const run = useCallback(async <T,>(operation: () => Promise<T>) => {
     setBusy(true);
@@ -383,14 +406,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return null;
     }
     setGenerationNotice(null);
-    const result = await run(() => api.generate(configuration, options));
+    const ids = options.groupIds ?? configuration.selectedGroupIds;
+    if (!ids.length) { setError("Dołącz co najmniej jedną grupę do generowania."); return null; }
+    const requested = options.groupIds ? {...configuration, selectedGroupIds: [...new Set(ids)]} : configuration;
+    if (options.groupIds) {
+      configurationRef.current = requested;
+      setConfigurationState(requested);
+      setInputReport(null);
+    }
+    const result = await run(() => api.generate(requested, options));
     // Never attach a late response to a configuration edited during the request.
-    if (configurationRef.current !== configuration) return null;
+    if (configurationRef.current !== requested) return null;
+    setGenerationAttempt(result);
+    const sameScope = JSON.stringify(generatedGroups(generation)) === JSON.stringify([...new Set(ids)].sort());
     if (isValidatedPlan(generation) && (
-      !isValidatedPlan(result) || (options.optimize && !isBetterPlan(result, generation))
+      !isValidatedPlan(result) || (sameScope && options.optimize && !isBetterPlan(result, generation))
     )) {
-      setGenerationNotice("Zachowano dotychczasowy poprawny plan. Ta próba nie znalazła lepszego układu.");
-      return generation;
+      setGenerationNotice(sameScope ? "Zachowano dotychczasowy poprawny plan. Ta próba nie znalazła lepszego układu."
+        : "Nie utworzono nowego zakresu. Poprzedni plan zachowano; poniżej podano wynik ostatniej próby.");
+      return sameScope ? generation : result;
     }
     if (result) {
       setGeneration(result);
@@ -407,12 +441,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       inputReport,
       generation,
       generationNotice,
+      generationAttempt,
       busy,
       error,
       migrationPending,
       setConfiguration,
       importProject,
       setActiveGroup,
+      setSelectedGroups,
       clearError: () => setError(null),
       loadDemo,
       startNew,
@@ -424,12 +460,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       inputReport,
       generation,
       generationNotice,
+      generationAttempt,
       busy,
       error,
       migrationPending,
       setConfiguration,
       importProject,
       setActiveGroup,
+      setSelectedGroups,
       loadDemo,
       startNew,
       validateInput,

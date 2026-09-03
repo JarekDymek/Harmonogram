@@ -79,6 +79,34 @@ export function WeekendsPage() {
     a.groupId === configuration.activeGroupId && [0, 6].includes(new Date(`${a.date}T12:00:00Z`).getUTCDay()));
   const educatorName = (id: string) => groupEducators.find(e => e.id === id)?.displayName ?? id;
 
+  const addMissingBase = () => {
+    const missing = [1,2,3,4,5,6].filter(p => !base.some(v => v.positionInCycle === p));
+    const additions: WeekendVariant[] = missing.map(position => ({
+      id: crypto.randomUUID(), configurationVersionId: configuration.configurationVersionId,
+      groupId: configuration.activeGroupId, variantKind: "BASE", positionInCycle: position,
+      offEducatorId: null, approved: false, approvalReference: "Do uzupełnienia i zapisania",
+      approvedAt: new Date().toISOString(), approvedBy: "",
+      saturdayTemplate: {id: crypto.randomUUID(), dayOfWeek: "SATURDAY", assignments: [
+        {id: crypto.randomUUID(), educatorId: "", startTime: "06:00", endTime: "14:00", sequenceNumber: 1},
+        {id: crypto.randomUUID(), educatorId: "", startTime: "14:00", endTime: "22:00", sequenceNumber: 2},
+      ]},
+      sundayTemplate: {id: crypto.randomUUID(), dayOfWeek: "SUNDAY", assignments: [
+        {id: crypto.randomUUID(), educatorId: "", startTime: "06:00", endTime: "14:00", sequenceNumber: 1},
+        {id: crypto.randomUUID(), educatorId: "", startTime: "14:00", endTime: "22:00", sequenceNumber: 2},
+      ]},
+    }));
+    setVariants([...variants, ...additions]);
+    setSaveMessage("Utworzono formularze tylko dla tej grupy. Wybierz osoby, sprawdź godziny i zapisz wzorce.");
+  };
+
+  const changeRows = (id: string, day: "saturdayTemplate" | "sundayTemplate", remove?: number) => {
+    setVariants(current => current.map(v => v.id !== id ? v : {
+      ...v, [day]: {...v[day], assignments: (remove === undefined
+        ? [...v[day].assignments, {id: crypto.randomUUID(), educatorId: "", startTime: "20:00", endTime: "22:00", sequenceNumber: 0}]
+        : v[day].assignments.filter((_,i) => i !== remove)).map((a,i) => ({...a, sequenceNumber: i+1}))},
+    }));
+  };
+
   const updateAssignment = (
     variantId: string,
     day: "saturdayTemplate" | "sundayTemplate",
@@ -100,10 +128,21 @@ export function WeekendsPage() {
   };
 
   const save = (nextVariants = variants) => {
-    if (daysOffPatterns.some(pattern => !validDaysOff(pattern))) {
+    if (daysOffPatterns.some(pattern => memberIds.has(pattern.educatorId) && !validDaysOff(pattern))) {
       setSaveMessage("Nie zapisano zmian: wybierz dwa różne dni w czerwonym wzorcu wolnego.");
       return;
     }
+    if (nextVariants.some(v => [v.saturdayTemplate,v.sundayTemplate].some(t =>
+      !t.assignments.length || t.assignments.some(a => !memberIds.has(a.educatorId) || !a.startTime || !a.endTime || a.startTime >= a.endTime)))) {
+      setSaveMessage("Nie zapisano: w każdym odcinku weekendu wybierz wychowawcę tej grupy i poprawne godziny od–do.");
+      return;
+    }
+    const approvedVariants = nextVariants.map(v => {
+      const working = new Set([...v.saturdayTemplate.assignments,...v.sundayTemplate.assignments].map(a => a.educatorId));
+      return {...v, approved: true, approvedAt: new Date().toISOString(), approvedBy: "UŻYTKOWNIK",
+        approvalReference: "Zapisano przez użytkownika",
+        offEducatorId: groupEducators.length === 3 ? groupEducators.find(e => !working.has(e.id))?.id ?? null : v.offEducatorId};
+    });
     setConfiguration({
       ...configuration,
       weekendDaysOffPatterns: daysOffPatterns,
@@ -111,7 +150,7 @@ export function WeekendsPage() {
         ...configuration.weekendVariants.filter(
           (item) => item.groupId !== configuration.activeGroupId,
         ),
-        ...nextVariants,
+        ...approvedVariants,
       ],
     });
     setSaveMessage("Zapisano wzorce weekendów i dni wolnych. Teraz sprawdź dane i wygeneruj plan ponownie.");
@@ -121,7 +160,7 @@ export function WeekendsPage() {
     const source = base.find(
       (item) => item.positionInCycle === Number(values.basePosition),
     );
-    if (!source) return;
+    if (!source) { setSaveMessage("Najpierw utwórz wzorce bazowe tej grupy."); return; }
     const item = structuredClone(source);
     item.id = crypto.randomUUID();
     item.variantKind = "SUBSTITUTE";
@@ -189,6 +228,11 @@ export function WeekendsPage() {
           setDaysOffPatterns(patterns); setSaveMessage("Niezapisane zmiany — kliknij Zapisz wzorce.");
         }} />
       <div className="weekend-grid" id="wzorce-weekendowe">
+        {base.length < 6 && <section className="section-block">
+          <h2>Wzorce weekendów grupy {configuration.groups.find(g => g.id === configuration.activeGroupId)?.code}</h2>
+          <p>Brakujące pozycje mają osobne formularze dla soboty i niedzieli. Nie kopiujemy obsady z innych grup.</p>
+          <button type="button" className="button button--secondary" onClick={addMissingBase}>Utwórz brakujące wzorce weekendów</button>
+        </section>}
         {base.map((variant) => {
           const working = new Set([
             ...variant.saturdayTemplate.assignments.map(
@@ -244,9 +288,10 @@ export function WeekendsPage() {
                         )
                       }
                     >
+                      <option value="">Wybierz wychowawcę</option>
                       {groupEducators.map((item) => (
                         <option key={item.id} value={item.id}>
-                          {item.shortCode}
+                          {item.displayName}
                         </option>
                       ))}
                     </select>
@@ -281,8 +326,11 @@ export function WeekendsPage() {
                         )
                       }
                     />
+                    <button type="button" className="icon-button" aria-label={`Usuń ${label}, odcinek ${index + 1}, pozycja ${variant.positionInCycle}`}
+                      onClick={() => changeRows(variant.id, day, index)}>×</button>
                   </div>
                 ))}
+                <button type="button" className="button button--secondary" onClick={() => changeRows(variant.id, day)}>Dodaj odcinek — {label}</button>
               </div>
             ))}
             <footer>

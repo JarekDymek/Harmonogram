@@ -437,7 +437,7 @@ class ScheduleConfiguration(APIModel):
         )
         self.group_id = active_group.id
         self.group_name = active_group.name
-        if not self.selected_group_ids:
+        if not self.selected_group_ids and "selected_group_ids" not in self.model_fields_set:
             self.selected_group_ids = active_ids
         if not self.group_memberships:
             for index, educator in enumerate(self.educators):
