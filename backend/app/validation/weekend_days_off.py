@@ -7,7 +7,7 @@ from collections import defaultdict
 from datetime import timedelta
 
 from app.domain.work_calendar import allowed_beside_night, care_target_minutes, duty_dates
-from app.services.reports import error
+from app.services.reports import error, warning
 from app.services.time_utils import aware_local_datetime, parse_hhmm
 from app.services.weekend import selected_weekend_variant
 
@@ -60,6 +60,15 @@ def _optimistic_capacity_message(configuration, pattern, week, care, person_work
             continue
         for interval in day.intervals:
             for minute in range(interval.start_minute, interval.end_minute, step):
+                # Required care already fills this group's demand; it is not
+                # available capacity for another educator.
+                if any(
+                    required.group_id == day.group_id and required.date == day.date
+                    and required.educator_id != pattern.educator_id
+                    and required.start_minute < minute + step and minute < required.end_minute
+                    for required in configuration.required_assignments
+                ):
+                    continue
                 if day.date.weekday() >= 5 and minute not in weekend_slots[(day.group_id, day.date)]:
                     continue
                 if not allowed_beside_night(
@@ -107,9 +116,11 @@ def _optimistic_capacity_message(configuration, pattern, week, care, person_work
         f"{educator.display_name}, tydzień {week + 1}: trzeba przydzielić "
         f"{target / 60:g} godz. opieki dziennej, ale przy tej parze wolnego "
         f"można zmieścić najwyżej {capacity / 60:g} godz. Brakuje "
-        f"{(target - capacity) / 60:g} godz. Dostępne: {details}. "
-        "Wybierz inną parę dni wolnych albo zmień obsadę weekendu lub "
-        "niedostępność. Nocka i jej oba dni pracy są już uwzględnione.",
+        f"co najmniej {(target - capacity) / 60:g} godz. Dostępne: {details} "
+        "Godziny obowiązkowych dyżurów innych osób są już obsadzone i nie mogą być liczone drugi raz. "
+        "Wybierz inną parę dni wolnych albo zmień obsadę weekendu lub niedostępność. "
+        "Jeśli para wolnego jest życzeniem, wybierz „Preferuj dwa kolejne dni” zamiast obowiązkowych dni. "
+        "Nocka i jej oba dni pracy są już uwzględnione.",
         educator_id=pattern.educator_id,
         date_value=monday,
         required=target,
@@ -141,7 +152,7 @@ def weekend_days_off_messages(configuration, assignments=None, *, care=None):
         problem = None
         if pattern.educator_id not in educators:
             problem = "Wybierz istniejącego, aktywnego wychowawcę albo usuń nieaktualny wzorzec wolnego."
-        elif len(pattern.days_off) != 2 or len(set(pattern.days_off)) != 2 or any(d not in range(7) for d in pattern.days_off):
+        elif pattern.mode == "FIXED" and (len(pattern.days_off) != 2 or len(set(pattern.days_off)) != 2 or any(d not in range(7) for d in pattern.days_off)):
             problem = "Wybierz dwa różne dni tygodnia jako dni całkowicie wolne."
         elif pattern.educator_id in seen:
             problem = "Ta osoba ma więcej niż jeden aktywny wzorzec wolnego. Pozostaw jeden wzorzec wspólny dla wszystkich grup."
@@ -185,6 +196,20 @@ def weekend_days_off_messages(configuration, assignments=None, *, care=None):
         for week in range(configuration.planning_horizon_weeks):
             monday = configuration.cycle_start_date + timedelta(days=7 * week)
             if not any(monday + timedelta(days=d) in person_work for d in (5, 6)):
+                continue
+            if pattern.mode == "PREFER_CONSECUTIVE":
+                if assignments is not None:
+                    free = [d for d in range(7) if monday + timedelta(days=d) not in person_work]
+                    if not any(d + 1 in free for d in free):
+                        name = educators[pattern.educator_id].display_name
+                        messages.append(warning("PREF-CONSECUTIVE-DAYS-OFF",
+                            f"{name}, tydzień {week + 1} ({monday:%d.%m}–{monday + timedelta(days=6):%d.%m}): "
+                            f"dni wolne: {', '.join(DAY_NAMES[d] for d in free) or 'brak'}. "
+                            "W znalezionym planie nie udało się połączyć ich w dwa kolejne dni. "
+                            "To niespełniona preferencja, nie błąd planu. Wymagane dni pracy, dyżury i odpoczynki nadal obowiązują; "
+                            "wynik nie dowodzi, że lepszy układ jest niemożliwy.",
+                            educator_id=pattern.educator_id, date_value=monday,
+                            context={"patternId": pattern.id, "weekNumber": week + 1, "freeDays": free}))
                 continue
             for day in pattern.days_off:
                 date = monday + timedelta(days=day)

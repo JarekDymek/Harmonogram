@@ -11,6 +11,7 @@ from app.models.schemas import (
     WorkAssignment,
 )
 from app.services.time_utils import normalize_pairs, parse_hhmm
+from app.validation.weekend_days_off import weekend_days_off_messages
 
 
 def _active_unavailability(
@@ -223,6 +224,10 @@ def calculate_objective(
         for assignment in canonical_assignments
     )
     return ObjectiveBreakdown(
+        consecutive_days_off_penalty=sum(
+            message.rule_id == "PREF-CONSECUTIVE-DAYS-OFF"
+            for message in weekend_days_off_messages(configuration, canonical_assignments)
+        ),
         afternoon_penalty=afternoon,
         weekend_penalty=weekend,
         split_days_penalty=split_days,
@@ -240,6 +245,7 @@ def calculate_objective(
 def objective_priority_key(value: ObjectiveBreakdown) -> tuple[int, ...]:
     """Publiczna kolejność porównania jakości, zgodna z celem CP-SAT."""
     return (
+        value.consecutive_days_off_penalty,
         value.split_days_penalty,
         value.continuous_block_handovers,
         value.distinct_educators_per_block,

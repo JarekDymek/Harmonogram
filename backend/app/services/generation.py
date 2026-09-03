@@ -74,7 +74,7 @@ def _diagnose_no_solution(
         return _solve_once(candidate, care).status == GenerationStatus.CANDIDATE_FOUND
 
     for pattern in configuration.weekend_days_off_patterns:
-        if not pattern.active:
+        if not pattern.active or pattern.mode != "FIXED":
             continue
         candidate = configuration.model_copy(deep=True)
         candidate.weekend_days_off_patterns = [p for p in candidate.weekend_days_off_patterns if p.id != pattern.id]
@@ -297,7 +297,7 @@ def generate_schedule(
 
     solver_result = _solve_once(configuration, input_report.care, optimize=optimize)
     if solver_result.status == GenerationStatus.NO_SOLUTION:
-        diagnostic_messages = _diagnose_no_solution(
+        diagnostic_messages = getattr(solver_result, "conflict_messages", None) or _diagnose_no_solution(
             configuration,
             input_report.care,
         )

@@ -3,7 +3,7 @@ import { WEEKDAY_NAMES } from "../nightDuties";
 import "./WeekendDaysOffEditor.css";
 
 export function validDaysOff(pattern: WeekendDaysOffPattern) {
-  return !pattern.active || (pattern.daysOff.length === 2 && new Set(pattern.daysOff).size === 2 &&
+  return !pattern.active || pattern.mode === "PREFER_CONSECUTIVE" || (pattern.daysOff.length === 2 && new Set(pattern.daysOff).size === 2 &&
     pattern.daysOff.every(d => Number.isInteger(d) && d >= 0 && d <= 6));
 }
 
@@ -21,11 +21,12 @@ export function WeekendDaysOffEditor({ educators, patterns, messages, onChange }
     <p>Wybierz raz dla każdej osoby i kliknij „Zapisz wzorce”. Gdy ta osoba pracuje w sobotę lub niedzielę,
       wskazane dni w tym samym tygodniu (poniedziałek–niedziela) będą całkowicie wolne.
       Dotyczy to wszystkich grup, szkoły i obu dat nocki. W wolny weekend wzorzec się nie włącza.</p>
-    <p className="muted">To obowiązkowe wolne, nie preferencja. Zapis nie przenosi ani nie usuwa istniejących dyżurów.
-      Konflikt wskaże „Sprawdź dane” przed generowaniem.</p>
+    <p className="muted">Możesz wskazać obowiązkową parę albo poprosić o dwa kolejne dni bez wybierania dat.
+      Przy preferencji generator dobiera parę osobno na każdy tydzień. Jeśli jej nie znajdzie, zwróci poprawny plan
+      z informacją o rozdzielonym wolnym. Nocka, szkoła i pozostałe obowiązki nie są pomijane.</p>
     <div className="record-list">{educators.map(educator => {
       const pattern = patterns.find(p => p.educatorId === educator.id);
-      const errors = messages.filter(m => m.ruleId === "REQ-WEEKEND-DAYS-OFF-001" && m.educatorId === educator.id);
+      const errors = messages.filter(m => m.severity === "ERROR" && m.ruleId === "REQ-WEEKEND-DAYS-OFF-001" && m.educatorId === educator.id);
       const invalid = pattern && !validDaysOff(pattern);
       const update = (index: number, value: string) => {
         const next = pattern ? structuredClone(pattern) : {
@@ -38,7 +39,18 @@ export function WeekendDaysOffEditor({ educators, patterns, messages, onChange }
         key={educator.id} id={pattern ? `wolne-${pattern.id}` : `wolne-osoba-${educator.id}`}>
         <h3>{educator.displayName}</h3>
         <div className="inline-form">
-          {[0, 1].map(index => <label key={index}>
+          <label>Sposób planowania wolnego
+            <select aria-label={`${educator.displayName}: sposób planowania wolnego`}
+              value={pattern?.mode ?? "FIXED"}
+              onChange={e => onChange([...patterns.filter(p => p.educatorId !== educator.id), {
+                ...(pattern ?? {id: crypto.randomUUID(), educatorId: educator.id, daysOff: [], active: true}),
+                mode: e.target.value as "FIXED" | "PREFER_CONSECUTIVE",
+              }])}>
+              <option value="FIXED">Obowiązkowe wskazane dni</option>
+              <option value="PREFER_CONSECUTIVE">Preferuj dwa kolejne dni — wybiera generator</option>
+            </select>
+          </label>
+          {pattern?.mode !== "PREFER_CONSECUTIVE" && [0, 1].map(index => <label key={index}>
             {index === 0 ? "Pierwszy dzień wolny" : "Drugi dzień wolny"}
             <select aria-label={`${educator.displayName}: ${index === 0 ? "pierwszy" : "drugi"} dzień wolny`}
               aria-invalid={Boolean(invalid || errors.length)} value={pattern?.daysOff[index] ?? -1}
@@ -56,6 +68,8 @@ export function WeekendDaysOffEditor({ educators, patterns, messages, onChange }
         </div>
         {invalid && <p role="alert">Wybierz dwa różne dni. Oba pola muszą być uzupełnione.</p>}
         {errors.map((m, i) => <p role="alert" key={i}>{m.message}</p>)}
+        {pattern?.mode === "PREFER_CONSECUTIVE" && <p>To preferencja: niespełnienie jej nie zablokuje planu.
+          Dni, których dotyka nocka lub praca w szkole, nie mogą być wolne.</p>}
         {!pattern && <small>Brak stałego wzorca — generator wybierze dwa dni wolne.</small>}
       </article>;
     })}</div>

@@ -18,6 +18,9 @@ export function isValidatedPlan(result: GenerateResponse | null): result is Vali
 // Public quality order supplied by the backend, not a second rule validator.
 export function isBetterPlan(next: GenerateResponse, previous: GenerateResponse): boolean {
   if (!next.objective || !previous.objective) return false;
+  const nextDaysOff = next.objective.consecutiveDaysOffPenalty ?? 0;
+  const previousDaysOff = previous.objective.consecutiveDaysOffPenalty ?? 0;
+  if (nextDaysOff !== previousDaysOff) return nextDaysOff < previousDaysOff;
   const keys = [
     "splitDaysPenalty", "continuousBlockHandovers", "distinctEducatorsPerBlock",
     "totalSegments", "shortMiddleSegments", "preferredUnavailabilityPenalty",

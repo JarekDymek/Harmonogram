@@ -244,6 +244,18 @@ export function getRuleGuidance(
       actionTo: "/urzadzenia",
     };
   }
+  if (ruleId === "PREF-CONSECUTIVE-DAYS-OFF") {
+    const patternId = contextString(message, "patternId");
+    const groupId = configuration?.groupMemberships.find(m => m.active && m.educatorId === message.educatorId)?.groupId;
+    return {
+      title: "Plan gotowy — dni wolne nie są kolejne",
+      explanation: message.message,
+      destination: "Weekendy → preferencja dni wolnych",
+      actionLabel: "Zobacz preferencję",
+      actionTo: `/weekendy${groupId ? `?grupa=${encodeURIComponent(groupId)}` : ""}#${patternId ? `wolne-${anchor(patternId)}` : "wolne-za-weekend"}`,
+      repairable: false,
+    };
+  }
   if (ruleId === "REQ-WEEKEND-DAYS-OFF-001") {
     const patternId = contextString(message, "patternId");
     const groupId = configuration?.groupMemberships.find(m => m.active && m.educatorId === message.educatorId)?.groupId;

@@ -280,6 +280,7 @@ export interface WeekendDaysOffPattern {
   educatorId: string;
   daysOff: number[];
   active: boolean;
+  mode?: "FIXED" | "PREFER_CONSECUTIVE";
 }
 
 export interface DomainMessage {
@@ -330,6 +331,7 @@ export interface InputReport {
 }
 
 export interface Objective {
+  consecutiveDaysOffPenalty?: number;
   afternoonPenalty: number;
   weekendPenalty: number;
   splitDaysPenalty: number;
