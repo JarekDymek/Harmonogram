@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { GroupScopePanel } from "./GroupScopePanel";
 import { useCallback, useState } from "react";
 import { ContextHelp } from "./ContextHelp";
 import { HashFocus } from "./HashFocus";
@@ -167,6 +168,7 @@ export function Layout() {
           </div>
         )}
         <main id="main-content" className="main-content">
+          <GroupScopePanel />
           <Outlet />
         </main>
       </div>

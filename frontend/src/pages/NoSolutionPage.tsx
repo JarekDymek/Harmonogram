@@ -5,7 +5,8 @@ import { useAppState } from "../state/AppState";
 import { getRuleGuidance } from "../help";
 
 export function NoSolutionPage() {
-  const { configuration, generation } = useAppState();
+  const { configuration, generation: saved, generationAttempt } = useAppState();
+  const generation = generationAttempt ?? saved;
   const conflict = generation?.conflictReport;
   if (!conflict) {
     return (

@@ -177,7 +177,7 @@ export function resizeInternatGroups(
     .filter((item) => item.active)
     .sort((a, b) => a.displayOrder - b.displayOrder);
   next.groupCount = remaining.length;
-  next.selectedGroupIds = remaining.map((item) => item.id);
+  next.selectedGroupIds = next.selectedGroupIds.filter(id => remaining.some(group => group.id === id));
   if (!remaining.some((item) => item.id === next.activeGroupId)) {
     next.activeGroupId = remaining[0].id;
   }
@@ -193,7 +193,7 @@ export function resizeInternatGroups(
 }
 
 export function BasicPage() {
-  const { configuration, generation, setConfiguration } = useAppState();
+  const { configuration, setConfiguration, setSelectedGroups, busy } = useAppState();
   const form = useForm<FormValues>({ resolver: zodResolver(schema) });
   const { register, reset, watch, handleSubmit, formState: { errors, isSubmitSuccessful } } = form;
 
@@ -305,19 +305,7 @@ export function BasicPage() {
     const selected = checked
       ? [...new Set([...configuration.selectedGroupIds, groupId])]
       : configuration.selectedGroupIds.filter((id) => id !== groupId);
-    if (!selected.length) return;
-    const retainedLocks = configuration.lockedAssignments.filter(
-      (item) => item.groupId !== groupId,
-    );
-    const groupLocks =
-      !checked && generation
-        ? generation.assignments.filter((item) => item.groupId === groupId)
-        : [];
-    setConfiguration({
-      ...configuration,
-      selectedGroupIds: selected,
-      lockedAssignments: [...retainedLocks, ...groupLocks],
-    });
+    setSelectedGroups(selected);
   };
 
   const copyToNextGroup = () => {
@@ -453,6 +441,7 @@ export function BasicPage() {
               <input
                 type="checkbox"
                 checked={configuration.selectedGroupIds.includes(group.id)}
+                disabled={busy}
                 onChange={(event) => toggleSelected(group.id, event.target.checked)}
               />
               {group.code} · {group.name}

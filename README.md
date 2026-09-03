@@ -1,5 +1,24 @@
 # Harmonogram MOW
 
+### Ręczne dołączanie grup (1.5.0)
+
+Panel „Grupy dołączone do generowania” oddziela oglądaną grupę od zakresu
+obliczeń. „Dołącz tę grupę i wygeneruj” dodaje bieżącą grupę do zaznaczonych;
+odznaczenie zawiesza grupę bez usuwania danych. Pusty zakres nie uruchamia
+generatora. Braki obsady, planów i weekendów odłączonych grup nie blokują
+wybranego zakresu. Znane obowiązkowe zajęcia wspólnych wychowawców nadal
+chronią przed kolizjami i naruszeniem odpoczynku.
+
+Status gotowego planu dotyczy grup obecnych w wyniku, nie aktualnie
+przeglądanej grupy. Nieudane rozszerzenie zakresu zachowuje poprzedni
+poprawny wynik i pokazuje osobno błędy nowej próby. Edycja niezależnej
+zawieszonej grupy nie kasuje planu; zmiana jego danych zapisuje lokalną
+kopię przed unieważnieniem wyniku.
+
+W „Weekendy” można utworzyć brakujące pozycje 1–6 dla aktywnej grupy,
+wybrać jej wychowawców i dodawać lub usuwać odcinki. Nowe formularze nie
+kopiują obsady innych grup. Uzupełnienie i zapis zatwierdza wzorce.
+
 Responsywna aplikacja webowa do wspólnego generowania harmonogramu od jednej
 do ośmiu grup internatu Młodzieżowego Ośrodka Wychowawczego, dla horyzontu od
 jednego do sześciu tygodni. Każda grupa ma trzech wychowawców podstawowych oraz

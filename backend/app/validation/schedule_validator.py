@@ -1383,6 +1383,9 @@ def validate_schedule(
     calculated_care: list[CalculatedCareDay] | None = None,
     *, _group_view: bool = False,
 ) -> ValidationReport:
+    if not _group_view:
+        from app.services.scope import selected_configuration
+        configuration = selected_configuration(configuration)
     if not _group_view and (len(configuration.groups) > 1 or any(
         item.group_id is None for item in configuration.educators
     ) or configuration.external_duty_assignments or configuration.required_assignments or configuration.locked_assignments or configuration.weekend_days_off_patterns):

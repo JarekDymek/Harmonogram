@@ -3,6 +3,7 @@ import { DAY_NAMES, EmptyState, MessagesTable, PageHeader, StatusBadge, formatMi
 import { useAppState } from "../state/AppState";
 import { isValidatedPlan } from "../generation";
 import { calendarDuties } from "../nightDuties";
+import { generatedGroups } from "../groupScope";
 
 function educatorColor(educatorId: string) {
   let hash = 0;
@@ -26,6 +27,7 @@ export function InternatPage() {
   const groups = configuration.groups
     .filter((item) => item.active)
     .sort((a, b) => a.displayOrder - b.displayOrder);
+  const completed = new Set(isValidatedPlan(generation) ? generatedGroups(generation) : []);
   const assignments = isValidatedPlan(generation) ? generation.assignments.filter((item) => weekDates.includes(item.date)) : [];
   const educatorById = new Map(configuration.educators.map((item) => [item.id, item]));
   const duties = calendarDuties(configuration).filter(d => weekDates.includes(d.date));
@@ -63,7 +65,8 @@ export function InternatPage() {
                 groupAssignments.forEach((item) => totals.set(item.educatorId, (totals.get(item.educatorId) ?? 0) + item.endMinute - item.startMinute));
                 return (
                   <tr key={group.id}>
-                    <th><strong>{group.code}</strong><span>{group.name}</span><small>{group.classLabel}</small></th>
+                    <th><strong>{group.code}</strong><span>{group.name}</span><small>{group.classLabel}</small>
+                      {!completed.has(group.id) && <small>Brak wygenerowanego planu</small>}</th>
                     {weekDates.map((date) => (
                       <td key={date}>
                         {groupAssignments

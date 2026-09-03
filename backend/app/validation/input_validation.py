@@ -349,7 +349,7 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
                 rules.RULE_NO_GUESSING,
                 "Relacje nie mogą łączyć różnych wersji konfiguracji.",
                 required=configuration.configuration_version_id,
-                actual=sorted(version_ids),
+                actual=", ".join(sorted(version_ids)),
             )
         )
 
@@ -631,9 +631,9 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
         messages.append(
             error(
                 rules.RULE_ROTATION,
-                "Wymagane jest dokładnie sześć zatwierdzonych wariantów BASE pozycji 1–6.",
+                "Brakuje zapisanych wzorców weekendów pozycji 1–6. Otwórz Weekendy w tej grupie, utwórz brakujące wzorce, wybierz osoby i zapisz.",
                 required="1,2,3,4,5,6",
-                actual=sorted(value for value in positions if value is not None),
+                actual=", ".join(str(value) for value in sorted(v for v in positions if v is not None)) or "brak",
             )
         )
     expected_pairs = (
@@ -660,7 +660,7 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
                     rules.RULE_WEEKEND,
                     "Wzorzec weekendu wymaga pary wychowawców; oprócz niej może zawierać stałe dyżury wychowawcy pomocniczego.",
                     required="2 osoby w parze oraz opcjonalny stały pomocniczy",
-                    actual=sorted(working),
+                    actual=", ".join(sorted(working)),
                     context={"position": position},
                 )
             )
@@ -1353,6 +1353,12 @@ def validate_configuration(
     configuration: ScheduleConfiguration,
     *, _group_view: bool = False,
 ) -> InputValidationResponse:
+    if not _group_view:
+        from app.services.scope import selected_configuration
+        configuration = selected_configuration(configuration)
+        if not configuration.selected_group_ids:
+            return InputValidationResponse(status=InputStatus.INVALID_INPUT, public_result=PublicResult.DANE_NIEPOPRAWNE,
+                messages=[error(rules.RULE_NO_GUESSING, "Dołącz co najmniej jedną grupę do generowania.")])
     if not _group_view and (len(configuration.groups) > 1 or any(
         item.group_id is None for item in configuration.educators
     ) or configuration.external_duty_assignments or configuration.required_assignments or configuration.locked_assignments or configuration.weekend_days_off_patterns):

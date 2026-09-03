@@ -281,6 +281,8 @@ def generate_schedule(
     *,
     optimize: bool = False,
 ) -> GenerateResponse:
+    from app.services.scope import selected_configuration
+    configuration = selected_configuration(configuration)
     next_weekend_variant = expected_weekend_position(
         configuration.starting_weekend_variant,
         configuration.planning_horizon_weeks + 1,
