@@ -17,6 +17,20 @@ def night(config, educator="B", day=1):
     return ExternalDutyAssignment(id="TEST-NIGHT", educator_id=educator, start_date_time=start, end_date_time=start + timedelta(hours=8), duty_type="NIGHT")
 
 
+def test_regular_wednesday_night_is_inside_28_5_hour_total_each_week():
+    config = demo_configuration()
+    config.planning_horizon_weeks = 6
+    member = config.group_memberships[0]
+    member.weekly_target_hours_by_week = [28.5] * 6
+    member.hours_include_fixed_nights = True
+    config.external_duty_assignments = [night(config, member.educator_id, 2 + week * 7).model_copy(update={
+        "id": f"WED-{week}", "regular_night": True, "locked": True, "counts_towards_hours": True,
+        "budget_group_id": member.group_id, "credited_minutes": 480,
+    }) for week in range(6)]
+    assert [care_target_minutes(config, member, week) for week in range(1, 7)] == [1230] * 6
+    assert member.weekly_target_hours_by_week == [28.5] * 6
+
+
 def four_people():
     config = demo_configuration()
     config.educator_count = 4

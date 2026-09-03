@@ -1,5 +1,13 @@
 # Harmonogram MOW
 
+### Stała nocka w łącznym wymiarze (1.5.1)
+
+Dodanie, usunięcie lub przeniesienie stałej nocki nie zmienia wpisanego wymiaru tygodniowego.
+28,5 godziny łącznie oznacza 20,5 godziny opieki + 8 godzin stałej nocki.
+Starsze zawyżone zapisy można poprawić w karcie wychowawcy: „Starsza wersja doliczyła nockę ponad wymiar?”.
+Korekta pokazuje nowe wartości każdego tygodnia, wymaga zatwierdzenia i zachowuje lokalną kopię konfiguracji.
+Nie zmienia automatycznie godzin innych osób ani nie usuwa nocek. Dodatkowe nocki/nadgodziny pozostają oddzielne.
+
 ### Ręczne dołączanie grup (1.5.0)
 
 Panel „Grupy dołączone do generowania” oddziela oglądaną grupę od zakresu
