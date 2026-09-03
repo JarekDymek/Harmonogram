@@ -4,6 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from math import ceil
+from time import monotonic
 
 from ortools.sat.python import cp_model
 
@@ -20,7 +21,9 @@ from app.models.schemas import (
     UnavailabilityScope,
     UnavailabilityType,
     WorkAssignment,
+    DomainMessage,
 )
+from app.services.reports import error
 from app.services.time_utils import (
     TimeDomainError,
     elapsed_minutes,
@@ -41,6 +44,7 @@ class InternatSolverResult:
     solver_status_name: str = ""
     stage_values: dict[str, int] | None = None
     optimization_proven: bool = False
+    conflict_messages: list[DomainMessage] | None = None
 
 
 def _active_unavailability(item, target_date, week_number: int) -> bool:
@@ -506,6 +510,8 @@ def solve_internat_schedule(
 
     # One personal pattern across all groups. A night touching Saturday/Sunday
     # triggers it too, since works_day includes the entire fixed-work calendar.
+    off_assumptions = {}
+    consecutive_penalties = []
     for pattern in configuration.weekend_days_off_patterns:
         if not pattern.active or pattern.educator_id not in educator_index:
             continue
@@ -514,8 +520,68 @@ def solve_internat_schedule(
             offset = week_index * 7
             weekend_work = model.new_bool_var(f"weekend_work_{pattern.id}_{week_index}")
             model.add_max_equality(weekend_work, [works_day[(index, offset + d)] for d in (5, 6)])
-            for day in pattern.days_off:
-                model.add(works_day[(index, offset + day)] == 0).only_enforce_if(weekend_work)
+            if pattern.mode == "PREFER_CONSECUTIVE":
+                pairs = []
+                for day in range(6):
+                    pair = model.new_bool_var(f"free_pair_{pattern.id}_{week_index}_{day}")
+                    first, second = works_day[index, offset + day], works_day[index, offset + day + 1]
+                    model.add(pair <= 1 - first)
+                    model.add(pair <= 1 - second)
+                    model.add(pair >= 1 - first - second)
+                    pairs.append(pair)
+                has_pair = model.new_bool_var(f"free_pair_any_{pattern.id}_{week_index}")
+                model.add_max_equality(has_pair, pairs)
+                missed = model.new_bool_var(f"free_pair_missed_{pattern.id}_{week_index}")
+                model.add(missed >= weekend_work - has_pair)
+                model.add(missed <= weekend_work)
+                model.add(missed <= 1 - has_pair)
+                consecutive_penalties.append(missed)
+            else:
+                assumption = model.new_bool_var(f"required_off_{pattern.id}_{week_index}")
+                model.add_assumption(assumption)
+                off_assumptions[assumption.index] = (pattern, week_index)
+                for day in pattern.days_off:
+                    model.add(works_day[(index, offset + day)] == 0).only_enforce_if([weekend_work, assumption])
+
+    def off_conflicts(solver):
+        from app.validation.weekend_days_off import DAY_NAMES, RULE
+        core = [off_assumptions[key] for key in solver.sufficient_assumptions_for_infeasibility()
+                if key in off_assumptions]
+        result = []
+        for pattern, week_index in core:
+            monday = dates[week_index * 7]
+            name = educators[educator_index[pattern.educator_id]].display_name
+            days = ", ".join(DAY_NAMES[day] for day in pattern.days_off)
+            result.append(error(RULE,
+                f"{name}, tydzień {week_index + 1} ({monday:%d.%m}–{monday + timedelta(days=6):%d.%m}): "
+                f"obowiązkowe wolne: {days}. Solver potwierdził, że wskazane wzorce wolnego "
+                "łącznie z pozostałymi wymaganiami nie pozwalają ułożyć planu. "
+                "Lista jest zestawem kolidujących warunków, nie oznacza, że każdy wpis osobno jest błędny. "
+                "Jeżeli ta para jest życzeniem, w kroku Weekendy wybierz „Preferuj dwa kolejne dni”. "
+                "Jeżeli musi być obowiązkowa, trzeba zmienić powiązaną obsadę lub dostępność, nie sam bilans godzin.",
+                educator_id=pattern.educator_id, date_value=monday,
+                context={"patternId": pattern.id, "weekNumber": week_index + 1,
+                         "daysOff": pattern.days_off, "conflictType": "WEEKEND_OFF_CONFLICT_SET",
+                         "conflictSetSize": len(core)}))
+        return result
+
+    def improve_days_off(solver, status, deadline):
+        if not consecutive_penalties or status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return solver, status
+        remaining = min(8.0, deadline - monotonic())
+        if remaining <= 0 or solver.value(sum(consecutive_penalties)) == 0:
+            return solver, status
+        model.minimize(sum(consecutive_penalties))
+        preferred_solver = cp_model.CpSolver()
+        preferred_solver.parameters.max_time_in_seconds = remaining
+        preferred_solver.parameters.num_search_workers = 1
+        preferred_solver.parameters.random_seed = configuration.random_seed
+        preferred_status = preferred_solver.solve(model)
+        if preferred_status in (cp_model.OPTIMAL, cp_model.FEASIBLE) and (
+            preferred_solver.value(sum(consecutive_penalties)) <= solver.value(sum(consecutive_penalties))
+        ):
+            return preferred_solver, preferred_status
+        return solver, status
 
     # Ustalone, grupowe wzorce weekendowe.
     for group_id in group_ids:
@@ -634,7 +700,9 @@ def solve_internat_schedule(
         model.add_decision_strategy(extra_days, cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
         model.add_decision_strategy(list(group_starts.values()), cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
         model.add_decision_strategy(list(x.values()), cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
+        preference_deadline = monotonic() + configuration.solver_time_limit_seconds
         solver, status = first_feasible(model, configuration)
+        solver, status = improve_days_off(solver, status, preference_deadline)
         result_status = generation_status(status)
         assignments = []
         if result_status == GenerationStatus.CANDIDATE_FOUND:
@@ -662,6 +730,7 @@ def solve_internat_schedule(
             assignments=_canonical_merge(assignments),
             solver_status_name=solver.status_name(status),
             optimization_proven=False,
+            conflict_messages=off_conflicts(solver) if status == cp_model.INFEASIBLE else None,
         )
 
     preferred_terms: list[cp_model.IntVar] = []
@@ -805,6 +874,7 @@ def solve_internat_schedule(
     )
     model.minimize(0)
     feasibility_solver = configured_solver()
+    preference_deadline = monotonic() + configuration.solver_time_limit_seconds
     feasibility_status = feasibility_solver.solve(model)
     if feasibility_status == cp_model.INFEASIBLE:
         return InternatSolverResult(
@@ -812,6 +882,7 @@ def solve_internat_schedule(
             assignments=[],
             solver_status_name=feasibility_solver.status_name(feasibility_status),
             stage_values={},
+            conflict_messages=off_conflicts(feasibility_solver),
         )
     if feasibility_status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return InternatSolverResult(
@@ -820,6 +891,9 @@ def solve_internat_schedule(
             solver_status_name=feasibility_solver.status_name(feasibility_status),
             stage_values={},
         )
+    feasibility_solver, feasibility_status = improve_days_off(feasibility_solver, feasibility_status, preference_deadline)
+    if consecutive_penalties:
+        model.add(sum(consecutive_penalties) <= feasibility_solver.value(sum(consecutive_penalties)))
     for variable in x.values():
         model.add_hint(variable, feasibility_solver.value(variable))
     model.minimize(lexicographic_expression)

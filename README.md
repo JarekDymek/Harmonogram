@@ -22,6 +22,25 @@ solvera ani reguł krytycznych.
 5. Nieustalona przyczyna nie jest prezentowana jako gotowy „plan naprawy”.
    Diagnostyka pomocnicza ma wspólny ograniczony budżet obliczeń.
 
+### Dwa kolejne dni wolne za weekend
+
+W kroku **Weekendy** każda osoba ma wybór: **Obowiązkowe wskazane dni** albo
+**Preferuj dwa kolejne dni — wybiera generator**. Dotychczasowe wpisy pozostają
+obowiązkowe, dopóki użytkownik sam nie zmieni trybu. Preferencja działa tylko
+w tygodniu z pracującym weekendem i dotyczy dwóch kolejnych dat w tym samym
+tygodniu poniedziałek–niedziela. Obie daty nocki i praca w szkole liczą się jako praca.
+
+Generator najpierw znajduje poprawny plan, następnie w ograniczonym czasie
+próbuje zmniejszyć liczbę niespełnionych preferencji. Nie odrzuca planu, gdy
+nie uda się uzyskać kolejnych dni wolnych: ostrzeżenie podaje osobę, tydzień
+i rzeczywiste dni wolne. Nie przedstawia końca czasu poszukiwań jako dowodu
+niemożliwości. Godziny, obsada, obowiązkowe dyżury i odpoczynki pozostają wymagane.
+
+Kontrola możliwości przydzielenia godzin nie liczy ponownie opieki już pokrytej
+obowiązkowym dyżurem innej osoby. Przy konflikcie solvera z obowiązkowymi
+wzorcami raport wskazuje wspólnie sprzeczne wzorce i tygodnie; taki zestaw
+nie oznacza, że każdy wymieniony wpis z osobna jest błędem.
+
 Dokumenty opisujące **pierwszą wersję / V1** są historyczne. Ich wykluczenie
 czwartego wychowawcy, stałych dyżurów, importu i eksportu nie opisuje obecnej aplikacji.
 

@@ -16,6 +16,45 @@ function show() {
 }
 
 describe("stałe wolne za weekend", () => {
+  it("zapisuje elastyczną preferencję bez wybierania dni i zachowuje inne obowiązkowe wzorce", async () => {
+    const original = migrateConfiguration({...configurationFixture, weekendDaysOffPatterns: [pattern]});
+    localStorage.setItem(key, JSON.stringify(original));
+    show();
+    const name = original.educators[1].displayName;
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText(`${name}: sposób planowania wolnego`), "PREFER_CONSECUTIVE");
+    expect(screen.queryByLabelText(`${name}: pierwszy dzień wolny`)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", {name: "Zapisz wzorce"}));
+    const saved = JSON.parse(localStorage.getItem(key)!);
+    expect(saved.weekendDaysOffPatterns).toContainEqual(pattern);
+    expect(saved.weekendDaysOffPatterns).toContainEqual(expect.objectContaining({
+      educatorId: "B", mode: "PREFER_CONSECUTIVE", daysOff: [], active: true,
+    }));
+    expect(saved.groupMemberships).toEqual(original.groupMemberships);
+    const imported = parseDeviceTransferPackage(serializeDeviceTransferPackage(createDeviceTransferPackage(saved, ""))).configuration;
+    expect(prepareConfigurationForApi(imported).weekendDaysOffPatterns).toEqual(saved.weekendDaysOffPatterns);
+  });
+
+  it("nie zamienia automatycznie istniejącej obowiązkowej pary w preferencję", async () => {
+    localStorage.setItem(key, JSON.stringify({...configurationFixture, weekendDaysOffPatterns: [pattern]}));
+    show();
+    const name = configurationFixture.educators[0].displayName;
+    expect(screen.getByLabelText(`${name}: sposób planowania wolnego`)).toHaveValue("FIXED");
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText(`${name}: sposób planowania wolnego`), "PREFER_CONSECUTIVE");
+    await user.selectOptions(screen.getByLabelText(`${name}: sposób planowania wolnego`), "FIXED");
+    expect(screen.getByLabelText(`${name}: pierwszy dzień wolny`)).toHaveValue("0");
+    expect(screen.getByLabelText(`${name}: drugi dzień wolny`)).toHaveValue("1");
+  });
+
+  it("pokazuje niespełnioną preferencję jako informację o gotowym planie, nie błąd", () => {
+    const message = {ruleId:"PREF-CONSECUTIVE-DAYS-OFF",severity:"WARNING" as const,
+      educatorId:"A",message:"Tydzień 2: wolne poniedziałek i piątek.",context:{patternId:"OFF-A"}};
+    const guidance = getRuleGuidance(message, configurationFixture);
+    expect(guidance.repairable).toBe(false);
+    expect(guidance.explanation).toBe(message.message);
+    expect(guidance.actionTo).toBe("/weekendy?grupa=G1#wolne-OFF-A");
+  });
   it("pokazuje pierwszeństwo stałego dyżuru bez nadpisania zapisanych wzorców", () => {
     const config = migrateConfiguration(configurationFixture);
     config.recurringRequiredDuties = [{id: "R", groupId: "G1", educatorId: "C", dayOfWeek: 5,

@@ -44,6 +44,13 @@ describe("poprawny plan przed optymalizacją", () => {
     expect(isBetterPlan(plan, plan)).toBe(false);
   });
 
+  it("nie odrzuca poprawy kolejnych dni wolnych tylko przez większą liczbę odcinków", () => {
+    const previous = {...plan, objective: {...plan.objective!, consecutiveDaysOffPenalty: 2}};
+    const next = {...plan, objective: {...plan.objective!, consecutiveDaysOffPenalty: 1, totalSegments: 20}};
+    expect(isBetterPlan(next, previous)).toBe(true);
+    expect(isBetterPlan(previous, next)).toBe(false);
+  });
+
   it.each([timeout, plan, {...plan, objective: {...plan.objective!, splitDaysPenalty: 3}}])(
     "zachowuje dobry plan po nieudanej albo gorszej próbie ulepszenia %#", async (response) => {
       const fetchMock = vi.fn().mockResolvedValue({ok: true, json: async () => response});

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date as Date, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -367,6 +367,7 @@ class WeekendDaysOffPattern(APIModel):
     # Validate semantic mistakes as actionable domain messages, not opaque 422s.
     days_off: list[int] = Field(default_factory=list)
     active: bool = True
+    mode: Literal["FIXED", "PREFER_CONSECUTIVE"] = "FIXED"
 
 
 class ScheduleConfiguration(APIModel):
@@ -634,6 +635,7 @@ class WorkAssignment(APIModel):
 
 
 class ObjectiveBreakdown(APIModel):
+    consecutive_days_off_penalty: int = 0
     afternoon_penalty: int = 0
     weekend_penalty: int = 0
     split_days_penalty: int = 0
