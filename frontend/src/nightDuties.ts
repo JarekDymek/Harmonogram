@@ -221,6 +221,13 @@ export function careHours(configuration: ScheduleConfiguration, membership: Grou
     - (membership.hoursIncludeFixedNights ? fixedNightHours(configuration, membership, weekIndex) : 0);
 }
 
+// The entered weekly total already includes regular nights. Editing the night
+// calendar must never increase or decrease that employment allocation.
+export function replaceRecurringNights(configuration: ScheduleConfiguration, nights: RecurringNightDuty[]): ScheduleConfiguration {
+  return {...configuration, recurringNightDuties: nights,
+    groupMemberships: configuration.groupMemberships.map(m => ({...m, hoursIncludeFixedNights: true}))};
+}
+
 export function calendarDuties(configuration: ScheduleConfiguration) {
   const duties = prepareConfigurationForApi(configuration).externalDutyAssignments.filter(d => d.locked);
   const first = parseDate(configuration.cycleStartDate);

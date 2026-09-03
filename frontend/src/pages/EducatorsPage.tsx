@@ -13,6 +13,7 @@ import {
   recurringNightLabel,
   fixedNightHours,
   careHours,
+  replaceRecurringNights,
 } from "../nightDuties";
 import type { RecurringNightDuty, Unavailability } from "../types";
 
@@ -226,13 +227,24 @@ export function EducatorsPage() {
   };
 
   const saveRecurringNights = (nights: RecurringNightDuty[]) => {
-    const next = { ...configuration, recurringNightDuties: nights };
-    next.groupMemberships = configuration.groupMemberships.map(m => ({ ...m,
-      weeklyTargetHoursByWeek: Array.from({ length: configuration.planningHorizonWeeks }, (_, w) =>
-        careHours(configuration, m, w) + fixedNightHours(next, m, w)),
-      hoursIncludeFixedNights: true,
-    }));
-    setConfiguration(next);
+    setConfiguration(replaceRecurringNights(configuration, nights));
+  };
+
+  const repairNightTotal = (membershipId: string) => {
+    const membership = configuration.groupMemberships.find(m => m.id === membershipId)!;
+    const totals = Array.from({length: configuration.planningHorizonWeeks}, (_, w) =>
+      (membership.weeklyTargetHoursByWeek[w] ?? membership.weeklyTargetHoursByWeek.at(-1) ?? 0) - fixedNightHours(configuration, membership, w));
+    if (totals.some((total,w) => total < fixedNightHours(configuration,membership,w))) {
+      setNightMessage("Nie zmieniono godzin: po tej korekcie wymiar byłby mniejszy niż same nocki. Wpisz właściwy łączny wymiar ręcznie."); return;
+    }
+    const name = educatorById.get(membership.educatorId)?.displayName ?? "wychowawcy";
+    const preview = totals.map((total,w) => `Tydzień ${w+1}: łącznie ${formatPolishHours(total)} godz., w tym nocki ${formatPolishHours(fixedNightHours(configuration,membership,w))} godz.; opieka ${formatPolishHours(total-fixedNightHours(configuration,membership,w))} godz.`).join("\n");
+    if (!window.confirm(`Korekta tylko dla ${name}. Użyj wyłącznie, jeśli starsza wersja omyłkowo dodała nocki ponad Twój wymiar.\n${preview}\nNocki, dostępność i godziny innych osób pozostaną bez zmian. Zatwierdzić?`)) return;
+    try { localStorage.setItem("harmonogram-before-night-budget-repair-v1", JSON.stringify({configuration,savedAt:new Date().toISOString()})); }
+    catch { setNightMessage("Nie zmieniono godzin: brak miejsca na kopię. Najpierw pobierz projekt."); return; }
+    setConfiguration({...configuration,groupMemberships:configuration.groupMemberships.map(m => m.id===membershipId
+      ? {...m,hoursIncludeFixedNights:true,weeklyTargetHoursByWeek:totals} : m)});
+    setNightMessage("Skorygowano wyłącznie wskazany wymiar. Stałe nocki są częścią sumy, nie dodatkiem. Kopia poprzednich danych została zachowana.");
   };
 
   const addRecurringNight = () => {
@@ -257,7 +269,7 @@ export function EducatorsPage() {
     };
     saveRecurringNights([...recurringNightDuties, item]);
     setRecurringNight({ ...recurringNight, educatorId: "" });
-    setNightMessage("Nocka zajmuje oba dni. Dodano 8 godzin do łącznego wymiaru każdego tygodnia; liczba godzin opieki dziennej nie zmieniła się.");
+    setNightMessage("Nocka zajmuje oba dni i wykorzystuje 8 godzin z wpisanego wymiaru. Łączny wymiar nie zmienił się; opieka na grupie zmniejszyła się o 8 godzin tygodniowo.");
   };
 
   const addAdditionalNight = () => {
@@ -486,6 +498,11 @@ export function EducatorsPage() {
                     Skopiuj tydzień 1 do pozostałych
                   </button>
                 )}
+                {fixedNightHours(configuration, membership, 0) > 0 && <details className="person-card__more">
+                  <summary>Starsza wersja doliczyła nockę ponad wymiar?</summary>
+                  <p>Stała nocka jest już w sumie. Przykład: 28,5 godz. łącznie = 20,5 godz. opieki + 8 godz. nocki. Jeśli starsza wersja zmieniła 28,5 na 36,5, użyj korekty. Najpierw zobaczysz nowe wartości do zatwierdzenia.</p>
+                  <button className="button button--ghost" type="button" disabled={busy} onClick={() => repairNightTotal(membership.id)}>Popraw wymiar zawyżony o nocki</button>
+                </details>}
                 <details className="person-card__more">
                   <summary>Więcej ustawień osoby</summary>
                   <label>Opis<textarea value={educator.description} onChange={(event) => updateEducator(educator.id, "description", event.target.value)} /></label>
@@ -527,7 +544,7 @@ export function EducatorsPage() {
           <span aria-hidden="true">✓</span>
           <div>
             <strong>Przy stałej nocce wybierasz tylko osobę i dzień</strong>
-            <p>Aplikacja sama przyjmie pracę od 22:00 do 06:00 następnego dnia i powtórzy ją w każdym tygodniu planu.</p>
+            <p>Aplikacja przyjmie 22:00–06:00 następnego dnia w każdym tygodniu. Te 8 godzin odejmuje od wpisanego łącznego wymiaru, nie dodaje ich ponad wymiar. Np. 28,5 godz. łącznie oznacza 20,5 godz. opieki i 8 godz. nocki.</p>
           </div>
         </div>
 
