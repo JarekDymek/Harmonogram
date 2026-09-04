@@ -282,6 +282,20 @@ code {
   margin-left: auto;
 }
 
+.pwa-update-notice {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px clamp(18px, 4vw, 56px);
+  border-block: 1px solid #e2b852;
+  background: #fff5d8;
+  color: #13293a;
+}
+.pwa-update-notice p { margin: .4rem 0; }
+.pwa-update-notice button { flex-shrink: 0; }
+@media (max-width: 650px) {
+  .pwa-update-notice { flex-direction: column; align-items: stretch; }
+}
 .install-button {
   min-height: 34px;
   padding: 7px 12px;

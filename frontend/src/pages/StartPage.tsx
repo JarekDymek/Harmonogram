@@ -152,6 +152,11 @@ export function StartPage() {
         </button>
       </section>
       <section className="section-block api-connection">
+        <h2>Instalacja w Windows bez pobierania EXE</h2>
+        <p>Zainstaluj tę samą aplikację przez Edge lub Chrome, bez osobnego instalatora i bez wyłączania zabezpieczeń.</p>
+        <button className="button button--secondary" type="button" onClick={() => navigate("/instalacja")}>Instalacja w Windows</button>
+      </section>
+      <section className="section-block api-connection">
         <div className="section-heading">
           <div>
             <span className="eyebrow">POŁĄCZENIE Z GENERATOREM</span>
