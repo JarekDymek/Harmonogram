@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        registerType: "autoUpdate",
+        registerType: "prompt",
         includeAssets: ["logo.svg"],
         pwaAssets: {
           preset: "minimal-2023",
@@ -33,6 +33,8 @@ export default defineConfig(({ mode }) => {
           categories: ["productivity", "business"],
         },
         workbox: {
+          // After user-approved activation, also take control of first-visit tabs.
+          clientsClaim: true,
           cleanupOutdatedCaches: true,
           navigateFallback: `${base}index.html`,
           navigateFallbackDenylist: [/^\/api\//],

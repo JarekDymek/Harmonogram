@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { GroupScopePanel } from "./GroupScopePanel";
 import { SetupGuide } from "./SetupGuide";
+import { PwaUpdateNotice } from "./PwaUpdateNotice";
 import "../guided-planning.css";
 import { useCallback, useState } from "react";
 import { ContextHelp } from "./ContextHelp";
@@ -151,6 +152,7 @@ export function Layout() {
             )}
           </div>
         </header>
+        <PwaUpdateNotice />
         {error && (
           <div className="global-error" role="alert">
             <strong>Nie udało się wykonać operacji.</strong>

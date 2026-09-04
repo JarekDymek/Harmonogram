@@ -1,5 +1,11 @@
 # Harmonogram MOW
 
+### Aktualizacje i instalacja Windows (1.6.1)
+
+Po wykryciu gotowej poprawki pojawia się „Odśwież aplikację”. Sprawdzenie następuje przy uruchomieniu, powrocie do okna i odzyskaniu połączenia, nie częściej niż raz na minutę. Zapisz formularze przed odświeżeniem. Trwające generowanie blokuje przycisk. Dodatkowa kopia zapisanego projektu i planu trafia do lokalnego klucza `harmonogram-mow-before-update-v1`; aktualizacja nie kasuje danych. Aktywacja w innej karcie nie wymusza przeładowania bieżącego formularza.
+
+Link instalacyjny: https://jarekdymek.github.io/Harmonogram/instalacja/ . PWA instaluje się przez Edge/Chrome w tym samym profilu przeglądarki, bez pobierania EXE i bez wyłączania Defendera/SmartScreen. Nie gwarantujemy braku ograniczeń administratora lub ostrzeżeń przeglądarki. Dane między różnymi profilami, przeglądarkami i urządzeniami przenosi się przez Eksport i import.
+
 ### Preferencje i prowadzenie krok po kroku (1.6.0)
 
 - **Weekendy → sposób planowania wolnego:** dwa kolejne dni od poniedziałku do piątku; dodatkowa opcja preferuje poniedziałek i wtorek po **wolnym** weekendzie. Każdy tydzień jest oceniany osobno. W planie skończonym wcześniejszy weekend pierwszego tygodnia jest nieznany; w cyklu sprawdzamy ostatni weekend. Obowiązkowe dyżury, szkoła i obie daty nocki mają pierwszeństwo. Niespełnione życzenie nie blokuje poprawnego planu.
