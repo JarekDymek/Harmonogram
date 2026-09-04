@@ -1,19 +1,16 @@
 import { SectionTiles } from "../components/SectionTiles";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { DemoNotice, EmptyState, PageHeader, StatusBadge } from "../components/UI";
 import { useAppState } from "../state/AppState";
-import { careHours } from "../nightDuties";
-import type { ScheduleConfiguration, WeekendVariant } from "../types";
-
-const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
+import { addBlankGroup, GROUP_CODES } from "../groups";
+import { GroupImport } from "../components/GroupImport";
 
 const schema = z
   .object({
     projectName: z.string().min(3, "Podaj nazwę projektu."),
-    groupCount: z.number().int().min(1).max(8),
     groupName: z.string().min(2, "Podaj nazwę grupy."),
     groupCode: z.string().min(1, "Podaj oznaczenie grupy."),
     classLabel: z.string(),
@@ -36,165 +33,10 @@ const schema = z
   });
 type FormValues = z.infer<typeof schema>;
 
-function cloneWeekendVariant(
-  source: WeekendVariant,
-  groupId: string,
-  educatorMap: Map<string, string>,
-): WeekendVariant {
-  const variant = structuredClone(source);
-  variant.id = crypto.randomUUID();
-  variant.groupId = groupId;
-  variant.replacesWeekendRotationVariantId = null;
-  variant.saturdayTemplate.id = crypto.randomUUID();
-  variant.sundayTemplate.id = crypto.randomUUID();
-  if (variant.offEducatorId) {
-    variant.offEducatorId = educatorMap.get(variant.offEducatorId) ?? null;
-  }
-  for (const template of [variant.saturdayTemplate, variant.sundayTemplate]) {
-    for (const assignment of template.assignments) {
-      assignment.id = crypto.randomUUID();
-      assignment.educatorId =
-        educatorMap.get(assignment.educatorId) ?? assignment.educatorId;
-    }
-  }
-  return variant;
-}
-
-export function resizeInternatGroups(
-  configuration: ScheduleConfiguration,
-  targetCount: number,
-): ScheduleConfiguration {
-  const next = structuredClone(configuration);
-  const active = next.groups
-    .filter((item) => item.active)
-    .sort((a, b) => a.displayOrder - b.displayOrder);
-  if (targetCount < active.length) {
-    const removedIds = new Set(active.slice(targetCount).map((item) => item.id));
-    next.groups = next.groups.filter((item) => !removedIds.has(item.id));
-    next.dayPlans = next.dayPlans.filter((item) => !removedIds.has(item.groupId));
-    next.weekendVariants = next.weekendVariants.filter(
-      (item) => !item.groupId || !removedIds.has(item.groupId),
-    );
-    next.groupMemberships = next.groupMemberships.filter(
-      (item) => !removedIds.has(item.groupId),
-    );
-    next.assignmentOverrides = next.assignmentOverrides.filter(
-      (item) => !item.groupId || !removedIds.has(item.groupId),
-    );
-    next.commonAreaDuties = next.commonAreaDuties.filter(
-      (item) => !removedIds.has(item.groupId),
-    );
-    next.lockedAssignments = next.lockedAssignments.filter(
-      (item) => !removedIds.has(item.groupId),
-    );
-    next.requiredAssignments = (next.requiredAssignments ?? []).filter(item => !removedIds.has(item.groupId));
-    next.recurringRequiredDuties = (next.recurringRequiredDuties ?? []).filter(item => !removedIds.has(item.groupId));
-    const usedEducators = new Set(
-      next.groupMemberships.map((item) => item.educatorId),
-    );
-    const removedEducators = new Set(
-      next.educators
-        .filter((item) => !usedEducators.has(item.id))
-        .map((item) => item.id),
-    );
-    next.educators = next.educators.filter((item) => usedEducators.has(item.id));
-    next.unavailability = next.unavailability.filter(
-      (item) => !removedEducators.has(item.educatorId),
-    );
-    next.externalDutyAssignments = next.externalDutyAssignments.filter(
-      (item) => !removedEducators.has(item.educatorId),
-    );
-    next.recurringNightDuties = (next.recurringNightDuties ?? []).filter(item => !removedEducators.has(item.educatorId));
-    next.recurringSchoolWork = (next.recurringSchoolWork ?? []).filter(item => !removedEducators.has(item.educatorId));
-    if (next.boundaryContext) {
-      next.boundaryContext.educators = next.boundaryContext.educators.filter(
-        (item) => !removedEducators.has(item.educatorId),
-      );
-    }
-  } else if (targetCount > active.length) {
-    const sourceGroup =
-      next.groups.find((item) => item.id === next.activeGroupId) ?? active[0];
-    const sourceMemberships = next.groupMemberships
-      .filter((item) => item.groupId === sourceGroup.id && item.active)
-      .slice(0, 3);
-    for (let index = active.length; index < targetCount; index += 1) {
-      const groupId = `G-${crypto.randomUUID()}`;
-      next.groups.push({
-        id: groupId,
-        displayOrder: index + 1,
-        code: ROMAN[index],
-        name: `Grupa ${ROMAN[index]}`,
-        classLabel: "",
-        active: true,
-      });
-      const educatorMap = new Map<string, string>();
-      for (const [memberIndex, sourceMembership] of sourceMemberships.entries()) {
-        const sourceEducator = next.educators.find(
-          (item) => item.id === sourceMembership.educatorId,
-        );
-        if (!sourceEducator) continue;
-        const educatorId = `EDU-${crypto.randomUUID()}`;
-        educatorMap.set(sourceEducator.id, educatorId);
-        next.educators.push({
-          ...sourceEducator,
-          id: educatorId,
-          groupId: null,
-          displayName: `Nowy wychowawca ${ROMAN[index]}-${memberIndex + 1}`,
-          shortCode: `${ROMAN[index]}${memberIndex + 1}`,
-        });
-        next.groupMemberships.push({
-          ...sourceMembership,
-          weeklyTargetHoursByWeek: Array.from({ length: next.planningHorizonWeeks }, (_, week) => careHours(configuration, sourceMembership, week)),
-          id: crypto.randomUUID(),
-          groupId,
-          educatorId,
-        });
-      }
-      next.dayPlans.push(
-        ...next.dayPlans
-          .filter((item) => item.groupId === sourceGroup.id)
-          .map((item) => ({
-            ...structuredClone(item),
-            id: crypto.randomUUID(),
-            groupId,
-            operatingIntervals: item.operatingIntervals.map((interval) => ({
-              ...interval,
-              id: crypto.randomUUID(),
-            })),
-            noCareIntervals: item.noCareIntervals.map((interval) => ({
-              ...interval,
-              id: crypto.randomUUID(),
-            })),
-          })),
-      );
-      next.weekendVariants.push(
-        ...next.weekendVariants
-          .filter((item) => item.groupId === sourceGroup.id)
-          .map((item) => cloneWeekendVariant(item, groupId, educatorMap)),
-      );
-    }
-  }
-  const remaining = next.groups
-    .filter((item) => item.active)
-    .sort((a, b) => a.displayOrder - b.displayOrder);
-  next.groupCount = remaining.length;
-  next.selectedGroupIds = next.selectedGroupIds.filter(id => remaining.some(group => group.id === id));
-  if (!remaining.some((item) => item.id === next.activeGroupId)) {
-    next.activeGroupId = remaining[0].id;
-  }
-  const activeGroup = remaining.find((item) => item.id === next.activeGroupId)!;
-  next.groupId = activeGroup.id;
-  next.groupName = activeGroup.name;
-  next.educatorCount = (next.groupMemberships.filter(
-    (item) => item.active && item.groupId === activeGroup.id,
-  ).length === 4
-    ? 4
-    : 3) as 3 | 4;
-  return next;
-}
-
 export function BasicPage() {
   const { configuration, setConfiguration, setSelectedGroups, busy } = useAppState();
+  const [newCode, setNewCode] = useState("");
+  const [groupMessage, setGroupMessage] = useState("");
   const form = useForm<FormValues>({ resolver: zodResolver(schema) });
   const { register, reset, watch, handleSubmit, formState: { errors, isSubmitSuccessful } } = form;
 
@@ -205,7 +47,6 @@ export function BasicPage() {
     )!;
     reset({
       projectName: configuration.projectName,
-      groupCount: configuration.groupCount,
       groupName: group.name,
       groupCode: group.code,
       classLabel: group.classLabel,
@@ -226,16 +67,10 @@ export function BasicPage() {
   const selectedHorizon = watch("planningHorizonWeeks", configuration.planningHorizonWeeks);
 
   const submit = (values: FormValues) => {
-    if (
-      values.groupCount < configuration.groupCount &&
-      !window.confirm(
-        "Zmniejszenie liczby grup usunie ich plany, członkostwa, weekendy i wyniki. Kontynuować?",
-      )
-    ) {
-      reset({ ...values, groupCount: configuration.groupCount });
-      return;
+    let next = structuredClone(configuration);
+    if (next.groups.some(g => g.id !== next.activeGroupId && g.code.trim().toUpperCase() === values.groupCode.trim().toUpperCase())) {
+      form.setError("groupCode", {message: "To oznaczenie ma już inna grupa."}); return;
     }
-    let next = resizeInternatGroups(configuration, values.groupCount);
     const group = next.groups.find((item) => item.id === next.activeGroupId)!;
     group.name = values.groupName;
     group.code = values.groupCode;
@@ -303,76 +138,17 @@ export function BasicPage() {
   };
 
   const toggleSelected = (groupId: string, checked: boolean) => {
+    if (form.formState.isDirty) { setGroupMessage("Najpierw zapisz zmiany konfiguracji. Wybór grup nie skasuje niezapisanych pól."); return; }
     const selected = checked
       ? [...new Set([...configuration.selectedGroupIds, groupId])]
       : configuration.selectedGroupIds.filter((id) => id !== groupId);
     setSelectedGroups(selected);
   };
 
-  const copyToNextGroup = () => {
-    const groups = configuration.groups
-      .filter((item) => item.active)
-      .sort((a, b) => a.displayOrder - b.displayOrder);
-    const sourceIndex = groups.findIndex(
-      (item) => item.id === configuration.activeGroupId,
-    );
-    const target = groups[sourceIndex + 1];
-    if (!target) return;
-    if (
-      !window.confirm(
-        `Zastąpić plany, wymiary i weekendy grupy ${target.code} konfiguracją aktywnej grupy?`,
-      )
-    ) return;
-    const sourceMembers = configuration.groupMemberships.filter(
-      (item) => item.groupId === configuration.activeGroupId && item.active,
-    );
-    const targetMembers = configuration.groupMemberships.filter(
-      (item) => item.groupId === target.id && item.active,
-    );
-    const educatorMap = new Map<string, string>();
-    sourceMembers.forEach((item, index) => {
-      if (targetMembers[index]) educatorMap.set(item.educatorId, targetMembers[index].educatorId);
-    });
-    const copiedMemberships = targetMembers.map((item, index) => ({
-      ...item,
-      role: sourceMembers[index]?.role ?? item.role,
-      weeklyTargetHoursByWeek:
-        sourceMembers[index]?.weeklyTargetHoursByWeek ?? item.weeklyTargetHoursByWeek,
-      description: sourceMembers[index]?.description ?? item.description,
-    }));
-    const otherMemberships = configuration.groupMemberships.filter(
-      (item) => item.groupId !== target.id,
-    );
-    const copiedPlans = configuration.dayPlans
-      .filter((item) => item.groupId === configuration.activeGroupId)
-      .map((item) => ({
-        ...structuredClone(item),
-        id: crypto.randomUUID(),
-        groupId: target.id,
-        operatingIntervals: item.operatingIntervals.map((interval) => ({
-          ...interval,
-          id: crypto.randomUUID(),
-        })),
-        noCareIntervals: item.noCareIntervals.map((interval) => ({
-          ...interval,
-          id: crypto.randomUUID(),
-        })),
-      }));
-    const copiedWeekends = configuration.weekendVariants
-      .filter((item) => item.groupId === configuration.activeGroupId)
-      .map((item) => cloneWeekendVariant(item, target.id, educatorMap));
-    setConfiguration({
-      ...configuration,
-      groupMemberships: [...otherMemberships, ...copiedMemberships],
-      dayPlans: [
-        ...configuration.dayPlans.filter((item) => item.groupId !== target.id),
-        ...copiedPlans,
-      ],
-      weekendVariants: [
-        ...configuration.weekendVariants.filter((item) => item.groupId !== target.id),
-        ...copiedWeekends,
-      ],
-    });
+  const addGroup = () => {
+    if (form.formState.isDirty) { setGroupMessage("Najpierw zapisz zmiany konfiguracji, potem dodaj grupę. Niezapisane pola pozostają w formularzu."); return; }
+    try { setConfiguration(addBlankGroup(configuration, newCode)); setGroupMessage(`Dodano pustą grupę ${newCode}. Uzupełnij jej osoby, plan pobytu i weekendy. Pozostałe grupy pozostają bez zmian.`); setNewCode(""); }
+    catch (error) { setGroupMessage(error instanceof Error ? error.message : "Nie dodano grupy."); }
   };
 
   return (
@@ -388,16 +164,9 @@ export function BasicPage() {
       <form className="form-card" onSubmit={handleSubmit(submit)} noValidate>
         <div className="form-grid form-grid--two">
           <label>Nazwa projektu<input {...register("projectName")} />{errors.projectName && <em>{errors.projectName.message}</em>}</label>
-          <label>
-            Liczba grup w internacie
-            <select {...register("groupCount", { valueAsNumber: true })}>
-              {Array.from({ length: 8 }, (_, index) => index + 1).map((value) => (
-                <option key={value} value={value}>{value} {value === 1 ? "grupa" : value < 5 ? "grupy" : "grup"}</option>
-              ))}
-            </select>
-          </label>
+          <p>Grupy zapisane w projekcie: {configuration.groups.map(g => g.code).join(", ")}. Zakres obliczeń wybierasz poniżej — odłączenie nie usuwa danych.</p>
           <label>Nazwa grupy<input {...register("groupName")} />{errors.groupName && <em>{errors.groupName.message}</em>}</label>
-          <label>Oznaczenie grupy<input {...register("groupCode")} /></label>
+          <label>Oznaczenie grupy<input {...register("groupCode")} />{errors.groupCode && <em>{errors.groupCode.message}</em>}</label>
           <label>Klasa (opcjonalnie)<input {...register("classLabel")} placeholder="np. kl. 7" /></label>
           <label>
             Liczba wychowawców
@@ -452,18 +221,20 @@ export function BasicPage() {
         </div>
         <div className="form-footer">
           {isSubmitSuccessful && <span role="status">Zapisano lokalnie.</span>}
-          {configuration.groups
-            .filter((item) => item.active)
-            .sort((a, b) => a.displayOrder - b.displayOrder)
-            .findIndex((item) => item.id === configuration.activeGroupId) <
-            configuration.groupCount - 1 && (
-            <button className="button button--secondary" type="button" onClick={copyToNextGroup}>
-              Skopiuj konfigurację do następnej grupy
-            </button>
-          )}
           <button className="button button--primary" type="submit">Zapisz konfigurację</button>
         </div>
       </form>
+      <section className="section-block" aria-label="Dodawanie grup">
+        <h2>Dodaj kolejną grupę</h2>
+        <p>Wybierz konkretną grupę, np. VI lub VII. Dostanie puste formularze — bez kopiowania wychowawców, godzin, nocek, weekendów lub zatwierdzeń innej grupy. Reguły ogólne i daty cyklu są wspólne dla projektu.</p>
+        <label>Oznaczenie nowej grupy<select value={newCode} disabled={busy} onChange={e => setNewCode(e.target.value)}>
+          <option value="">Wybierz grupę</option>
+          {GROUP_CODES.filter(code => !configuration.groups.some(g => g.code.trim().toUpperCase() === code)).map(code => <option key={code} value={code}>{code}</option>)}
+        </select></label>
+        <button type="button" className="button button--secondary" disabled={busy || !newCode || configuration.groups.length >= 8} onClick={addGroup}>Dodaj pustą grupę</button>
+        {groupMessage && <p role="status">{groupMessage}</p>}
+        <GroupImport hasUnsavedChanges={form.formState.isDirty}/>
+      </section>
     </SectionTiles>
   );
 }

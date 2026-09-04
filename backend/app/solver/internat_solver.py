@@ -24,6 +24,7 @@ from app.models.schemas import (
     DomainMessage,
 )
 from app.services.reports import error
+from app.services.mornings import morning_balance_cost
 from app.services.time_utils import (
     TimeDomainError,
     elapsed_minutes,
@@ -583,22 +584,28 @@ def solve_internat_schedule(
                          "conflictSetSize": len(core)}))
         return result
 
+    morning_expression, morning_bound = morning_balance_cost(model, x, memberships, educator_index, total_weeks, step)
+
     def improve_days_off(solver, status, deadline):
-        if (not consecutive_penalties and not prefer_visits) or status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             return solver, status
         remaining = min(8.0, deadline - monotonic())
         # Days off retain priority. The multiplier exceeds every possible
         # weighted split cost, including all selected groups together.
         bound = 3 * len(educators) * total_days * rules.SLOTS_PER_DAY + 1
-        preference = sum(consecutive_penalties) * bound + (split_expression if prefer_visits else 0)
+        preference = ((sum(consecutive_penalties) * bound + (split_expression if prefer_visits else 0))
+                      * (morning_bound + 1) + morning_expression)
         if remaining <= 0 or solver.value(preference) == 0:
             return solver, status
         model.minimize(preference)
+        for variable in x.values():
+            model.add_hint(variable, solver.value(variable))
         preferred_solver = cp_model.CpSolver()
         preferred_solver.parameters.max_time_in_seconds = remaining
         preferred_solver.parameters.num_search_workers = 1
         preferred_solver.parameters.random_seed = configuration.random_seed
         preferred_status = preferred_solver.solve(model)
+        model.clear_hints()
         if preferred_status in (cp_model.OPTIMAL, cp_model.FEASIBLE) and (
             preferred_solver.value(preference) <= solver.value(preference)
         ):
@@ -910,6 +917,8 @@ def solve_internat_schedule(
         model.add(sum(consecutive_penalties) <= feasibility_solver.value(sum(consecutive_penalties)))
     for variable in x.values():
         model.add_hint(variable, feasibility_solver.value(variable))
+    # A later optional quality pass must not undo the morning balance already found.
+    model.add(morning_expression <= feasibility_solver.value(morning_expression))
     model.minimize(lexicographic_expression)
     optimizer = configured_solver()
     optimization_status = optimizer.solve(model)

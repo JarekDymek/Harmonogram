@@ -7,7 +7,7 @@ import {AppStateProvider,migrateConfiguration} from "../state/AppState";
 import {configurationFixture} from "./fixture";
 import type {GenerateResponse} from "../types";
 import {planInputs} from "../groupScope";
-import {resizeInternatGroups} from "../pages/BasicPage";
+import { addBlankGroup, GROUP_CODES } from "../groups";
 
 const key="harmonogram-mow-configuration-v3";
 const resultKey="harmonogram-mow-generation-v3";
@@ -32,10 +32,11 @@ function show(path="/harmonogram") {
 describe("ręczny zakres grup",()=>{
   it("zapis konfiguracji i dodanie nowych grup nie dołączają ich samoczynnie",()=>{
     const c=config();
-    expect(resizeInternatGroups(c,2).selectedGroupIds).toEqual(["G1"]);
-    expect(resizeInternatGroups(c,8).selectedGroupIds).toEqual(["G1"]);
+    expect(addBlankGroup(c,"II").selectedGroupIds).toEqual(["G1"]);
+    const all = GROUP_CODES.filter(code => !c.groups.some(g => g.code === code)).reduce((next,code) => addBlankGroup(next,code), c);
+    expect(all.selectedGroupIds).toEqual(["G1"]);
     c.selectedGroupIds=[];
-    expect(resizeInternatGroups(c,2).selectedGroupIds).toEqual([]);
+    expect(addBlankGroup(c,"II").selectedGroupIds).toEqual([]);
   });
   it("odłączenie także w konfiguracji nie tworzy ukrytych blokad starego planu",async()=>{
     show("/konfiguracja");

@@ -2,24 +2,14 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { App } from "../App";
-import { resizeInternatGroups } from "../pages/BasicPage";
+import { addBlankGroup } from "../groups";
 import { AppStateProvider } from "../state/AppState";
 import { configurationFixture } from "./fixture";
 
 describe("projekt internatu", () => {
-  it("usuwa wszystkie zależności grupy podczas bezpiecznego zmniejszenia", () => {
-    const two = resizeInternatGroups(configurationFixture, 2);
-    const removedId = two.groups[1].id;
-    const reduced = resizeInternatGroups(two, 1);
-    expect(reduced.groupCount).toBe(1);
-    expect(reduced.groups.some((item) => item.id === removedId)).toBe(false);
-    expect(reduced.dayPlans.some((item) => item.groupId === removedId)).toBe(false);
-    expect(reduced.groupMemberships.some((item) => item.groupId === removedId)).toBe(false);
-    expect(reduced.weekendVariants.some((item) => item.groupId === removedId)).toBe(false);
-  });
 
   it("widok całego internatu pokazuje wszystkie aktywne grupy", () => {
-    const configuration = resizeInternatGroups(configurationFixture, 2);
+    const configuration = addBlankGroup(configurationFixture, "II");
     localStorage.setItem(
       "harmonogram-mow-configuration-v3",
       JSON.stringify(configuration),

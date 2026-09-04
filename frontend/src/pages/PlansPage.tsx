@@ -21,10 +21,12 @@ function preview(plan: DayPlan): CareInterval[] {
   if (!operating) return [];
   const start = toMinute(operating.startTime);
   const end = toMinute(operating.endTime);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return [];
   const noCare = plan.noCareIntervals[0];
   if (!noCare) return [{ startMinute: start, endMinute: end, requiredStaffCount: 1 }];
   const cutStart = toMinute(noCare.startTime);
   const cutEnd = toMinute(noCare.endTime);
+  if (!Number.isFinite(cutStart) || !Number.isFinite(cutEnd)) return [];
   return [
     ...(start < cutStart
       ? [{ startMinute: start, endMinute: cutStart, requiredStaffCount: 1 }]
@@ -38,6 +40,7 @@ function preview(plan: DayPlan): CareInterval[] {
 export function PlansPage() {
   const { configuration, setConfiguration } = useAppState();
   const [plans, setPlans] = useState<DayPlan[]>([]);
+  const [saveMessage, setSaveMessage] = useState("");
   const exceptionForm = useForm<{
     scope: "CYCLE_WEEK" | "SPECIFIC_DATE";
     weekNumber: number;
@@ -53,6 +56,7 @@ export function PlansPage() {
 
   useEffect(() => {
     if (configuration) {
+      setSaveMessage("");
       setPlans(
         structuredClone(
           configuration.dayPlans.filter(
@@ -102,8 +106,8 @@ export function PlansPage() {
         if (!intervals[0]) {
           intervals.push({
             id: crypto.randomUUID(),
-            startTime: boundary === "startTime" ? value : "08:00",
-            endTime: boundary === "endTime" ? value : "14:00",
+            startTime: boundary === "startTime" ? value : "",
+            endTime: boundary === "endTime" ? value : "",
             eventType: section === "noCareIntervals" ? "SCHOOL" : null,
             customEventType: null,
             description: "",
@@ -117,15 +121,24 @@ export function PlansPage() {
   };
 
   const save = () => {
+    const incomplete = plans.find(p => [...p.operatingIntervals, ...p.noCareIntervals]
+      .some(i => !i.startTime || !i.endTime || i.startTime >= i.endTime));
+    if (incomplete) {
+      setSaveMessage(`Nie zapisano: uzupełnij obie godziny od–do (${DAY_NAMES[incomplete.dayOfWeek ?? 0]}). Pozostałe grupy nie zostały zmienione.`);
+      return;
+    }
+    const approvedPlans = plans.map(p => ({...p, approved: true, approvedAt: new Date().toISOString(), approvedBy: "UŻYTKOWNIK"}));
+    setPlans(approvedPlans);
     setConfiguration({
       ...configuration,
       dayPlans: [
         ...configuration.dayPlans.filter(
           (item) => item.groupId !== configuration.activeGroupId,
         ),
-        ...plans,
+        ...approvedPlans,
       ],
     });
+    setSaveMessage("Zapisano i zatwierdzono plan pobytu tylko tej grupy. Puste dni oznaczają brak opieki.");
   };
 
   const addException = exceptionForm.handleSubmit((values) => {
@@ -199,6 +212,8 @@ export function PlansPage() {
         }
       />
       <section className="plan-list" id="plany-tygodniowe">
+        {saveMessage && <p role="status">{saveMessage}</p>}
+        {plans.some(p => !p.approved) && <p>Nowa grupa ma puste, niezatwierdzone dni. Wpisz jej własne godziny działania i nieobecności; puste dni oznaczają brak opieki. Następnie zapisz plany.</p>}
         {basePlans.map((plan) => {
           const intervals = preview(plan);
           const total = intervals.reduce(

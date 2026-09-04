@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any
+import json
 
 from app.models.schemas import DomainMessage, MessageSeverity
 
@@ -28,8 +29,10 @@ def error(
         group_id=group_id,
         start_time=start_time,
         end_time=end_time,
-        required_value=required,
-        actual_value=actual,
+        # A validation message must not itself crash when a rule compares a
+        # collection (e.g. two weekend teams). The public contract is scalar.
+        required_value=required if required is None or isinstance(required, (str, int, float)) else json.dumps(required, ensure_ascii=False, default=str),
+        actual_value=actual if actual is None or isinstance(actual, (str, int, float)) else json.dumps(actual, ensure_ascii=False, default=str),
         context=context or {},
     )
 

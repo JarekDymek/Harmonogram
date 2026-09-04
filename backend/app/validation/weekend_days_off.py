@@ -33,6 +33,10 @@ def _optimistic_capacity_message(configuration, pattern, week, care, person_work
         return None
     target = sum(care_target_minutes(configuration, member, week + 1) for member in memberships)
     group_ids = {member.group_id for member in memberships}
+    calculated_days = {(day.group_id, day.date) for day in care}
+    if any((group_id, monday + timedelta(days=d)) not in calculated_days
+           for group_id in group_ids for d in range(7)):
+        return None  # Unknown capacity must never be reported as zero capacity.
     step = configuration.organizational_rules.time_step_minutes
     weekend_slots = defaultdict(set)
     for group_id in group_ids:

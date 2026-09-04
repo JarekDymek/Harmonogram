@@ -1,4 +1,5 @@
 import { SectionTiles } from "../components/SectionTiles";
+import { deriveWeekendMetadata } from "../weekendMetadata";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { EmptyState, PageHeader, StatusBadge } from "../components/UI";
@@ -18,23 +19,11 @@ export function WeekendsPage() {
     weekNumber: number;
     saturdayDate: string;
     sundayDate: string;
-    offEducatorId: string;
   }>();
 
   useEffect(() => {
     if (configuration) {
       setDaysOffPatterns(structuredClone(configuration.weekendDaysOffPatterns ?? []));
-      const memberIds = new Set(
-        configuration.groupMemberships
-          .filter(
-            (item) =>
-              item.active && item.groupId === configuration.activeGroupId,
-          )
-          .map((item) => item.educatorId),
-      );
-      const groupEducators = configuration.educators.filter((item) =>
-        memberIds.has(item.id),
-      );
       setVariants(
         structuredClone(
           configuration.weekendVariants.filter(
@@ -51,10 +40,6 @@ export function WeekendsPage() {
         weekNumber: 1,
         saturdayDate: saturday.toISOString().slice(0, 10),
         sundayDate: sunday.toISOString().slice(0, 10),
-        offEducatorId:
-          configuration.educatorCount === 3
-            ? groupEducators[2]?.id
-            : "",
       });
     }
   }, [configuration, substituteForm]);
@@ -139,10 +124,9 @@ export function WeekendsPage() {
       return;
     }
     const approvedVariants = nextVariants.map(v => {
-      const working = new Set([...v.saturdayTemplate.assignments,...v.sundayTemplate.assignments].map(a => a.educatorId));
       return {...v, approved: true, approvedAt: new Date().toISOString(), approvedBy: "UŻYTKOWNIK",
         approvalReference: "Zapisano przez użytkownika",
-        offEducatorId: groupEducators.length === 3 ? groupEducators.find(e => !working.has(e.id))?.id ?? null : v.offEducatorId};
+        offEducatorId: deriveWeekendMetadata(configuration, v).offEducatorId};
     });
     setConfiguration({
       ...configuration,
@@ -170,7 +154,7 @@ export function WeekendsPage() {
     item.applicableWeekNumber = Number(values.weekNumber);
     item.applicableSaturdayDate = values.saturdayDate;
     item.applicableSundayDate = values.sundayDate;
-    item.offEducatorId = values.offEducatorId || null;
+    item.offEducatorId = deriveWeekendMetadata(configuration, item).offEducatorId;
     item.approvalReference = "ZATWIERDZENIE-UŻYTKOWNIKA";
     item.approvedAt = new Date().toISOString();
     item.approvedBy = "UŻYTKOWNIK";
@@ -392,19 +376,7 @@ export function WeekendsPage() {
               {...substituteForm.register("sundayDate")}
             />
           </label>
-          <label>
-            Osoba bez opieki dziennej w tym wzorcu
-            <select {...substituteForm.register("offEducatorId")}>
-              {configuration.educatorCount === 4 && (
-                <option value="">Bez pojedynczego wskazania</option>
-              )}
-              {groupEducators.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.shortCode}
-                </option>
-              ))}
-            </select>
-          </label>
+<p>Osoby bez opieki dziennej zostaną ustalone z obsady. Nie wpisujesz ich ponownie w osobnym polu.</p>
           <button className="button button--secondary" type="submit">
             Dodaj przez pełne sklonowanie
           </button>

@@ -6,6 +6,7 @@ import type {
   WorkAssignment,
 } from "./types";
 import { WORK_RULES_VERSION } from "./workRules";
+import { deriveWeekendMetadata } from "./weekendMetadata";
 
 export const NIGHT_START_TIME = "22:00";
 export const NIGHT_END_TIME = "06:00";
@@ -181,6 +182,7 @@ export function prepareConfigurationForApi(
   }
   return {
     ...backendConfiguration,
+    weekendVariants: configuration.weekendVariants.map(v => deriveWeekendMetadata(configuration, v)),
     requiredAssignments: required,
     externalDutyAssignments: [
       ...manualAssignments,

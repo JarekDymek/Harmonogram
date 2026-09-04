@@ -69,7 +69,9 @@ def commitment_messages(configuration, care=None, assignments=None):
             problem = "W dniu rozpoczęcia nocki wybierz tylko 20:00–22:00, a po nocce tylko 06:00–08:00, albo inną osobę."
         elif care is not None and item.group_id in configuration.selected_group_ids:
             day = care_map.get((item.group_id, item.date))
-            if day is None or any(not any(i.start_minute <= minute < i.end_minute for i in day.intervals)
+            # A missing calculation is unknown, not a day with zero demand.
+            # The originating group's validation already reports why it failed.
+            if day is not None and any(not any(i.start_minute <= minute < i.end_minute for i in day.intervals)
                                   for minute in range(item.start_minute, item.end_minute, step)):
                 problem = "W tych godzinach grupa nie wymaga opieki. Popraw plan pobytu albo godziny obowiązkowego dyżuru."
         if problem is None:

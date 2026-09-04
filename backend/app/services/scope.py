@@ -1,5 +1,7 @@
 """Request-only projection. Suspended groups remain intact in the saved project."""
 def selected_configuration(configuration):
+    from app.services.weekend_metadata import normalize_weekend_metadata
+    configuration = normalize_weekend_metadata(configuration)
     selected = set(configuration.selected_group_ids)
     active = {g.id for g in configuration.groups if g.active}
     if not selected or not selected <= active:
