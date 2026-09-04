@@ -16,6 +16,7 @@ import { VALIDATOR_VERSION } from "../workRules";
 import { calendarDuties, fixedNightHours } from "../nightDuties";
 import { WordExport } from "../components/WordExport";
 import { generatedGroups } from "../groupScope";
+import { generationMissing } from "../readiness";
 
 function educatorColor(educatorId: string) {
   let hash = 0;
@@ -108,7 +109,7 @@ export function SchedulePage() {
           <button
             className="button button--primary"
             type="button"
-            disabled={busy}
+            disabled={busy || generationMissing(configuration).length>0}
             onClick={() => void run()}
           >
             {busy ? "Układam i sprawdzam plan…" : generation?.generationStatus === "TIME_LIMIT" ? "Szukaj dłużej" : "Uruchom generator"}
@@ -413,7 +414,7 @@ export function SchedulePage() {
             <div><span>Krótkie środkowe</span><strong>{generation.objective.shortMiddleSegments}</strong></div>
             <div><span>Odchylenie godziny przekazania</span><strong>{generation.objective.afternoonPenalty}</strong></div>
             <div><span>Weekend</span><strong>{generation.objective.weekendPenalty}</strong></div>
-            <div><span>Dni dzielone</span><strong>{generation.objective.splitDaysPenalty}</strong></div>
+            <div><span>Koszt dzielonych dyżurów (z preferencją dojazdów)</span><strong>{generation.objective.splitDaysPenalty}</strong></div>
             <div><span>Długie odcinki</span><strong>{generation.objective.longSegmentsPenalty}</strong></div>
             <div><span>PREFERRED</span><strong>{generation.objective.preferredUnavailabilityPenalty}</strong></div>
           </div>

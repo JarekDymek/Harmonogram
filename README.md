@@ -1,5 +1,15 @@
 # Harmonogram MOW
 
+### Preferencje i prowadzenie krok po kroku (1.6.0)
+
+- **Weekendy → sposób planowania wolnego:** dwa kolejne dni od poniedziałku do piątku; dodatkowa opcja preferuje poniedziałek i wtorek po **wolnym** weekendzie. Każdy tydzień jest oceniany osobno. W planie skończonym wcześniejszy weekend pierwszego tygodnia jest nieznany; w cyklu sprawdzamy ostatni weekend. Obowiązkowe dyżury, szkoła i obie daty nocki mają pierwszeństwo. Niespełnione życzenie nie blokuje poprawnego planu.
+- **Wychowawcy → Preferuj jeden przyjazd dziennie:** koszt dodatkowego oddzielnego odcinka tej osoby jest trzykrotny. Stykające się dyżury dołączonych grup tworzą jeden blok. Pierwsza propozycja korzysta z krótkiej, ograniczonej czasowo próby poprawy; nieudana próba nie usuwa poprawnej propozycji. Dalszą optymalizację uruchamia przycisk ulepszania podziału.
+- **Reguły:** rozwijane objaśnienia parametrów; czerwone ostrzeżenia przy odejściu od ogólnych norm odpoczynku i pięciu dni pracy. Edycja pozostaje dostępna, również dla parametrów wyłączonego wyjątku. Zapis nie jest certyfikatem legalności. Historyczne wagi są opisane jako niekontrolujące obecnej kolejności celów solvera.
+- **Nowy projekt:** domyślnie tryb rzeczywisty i zatwierdzenie użytkownika Jarosław Dymek, datowane na dzień utworzenia, ważne rok. Daty nie odnawiają się podczas uruchamiania. Początkową przykładową strukturę trzeba sprawdzić i potwierdzić w Konfiguracji przed generowaniem. Istniejące projekty i ich profile pozostają bez zmian. Demonstracja jest dostępna osobno w Regułach; przed jej wczytaniem powstaje lokalna kopia projektu z planem, dostępna do przywrócenia w Eksport i import.
+- **Przewodnik:** sprawdza kompletność dołączonych grup, a nie wykonalność. Formularze można zwijać; link naprawy otwiera sekcję i wskazuje pole. Błędy pokazują opis, osobę i datę przed szczegółami technicznymi. Pomocnicze próby diagnostyczne są jawnie oznaczone i nigdy nie są publikowane jako poprawny plan. Jeśli przyczyny nie ustalono w budżecie, aplikacja nie wymyśla winnego pola.
+
+Podstawowe odniesienie prawne: [PIP — czas pracy](https://www.pip.gov.pl/dla-pracownikow/porady-prawne/czas-pracy). Zastosowanie wyjątków, Karty Nauczyciela i regulaminu placówki wymaga sprawdzenia właściwego dla danej osoby. Domyślne 5 dni pozostaje regułą; ręczna zmiana wymaga świadomej oceny podstawy.
+
 ### Stała nocka w łącznym wymiarze (1.5.1)
 
 Dodanie, usunięcie lub przeniesienie stałej nocki nie zmienia wpisanego wymiaru tygodniowego.
@@ -104,7 +114,7 @@ pola oznacza API dostępne pod tym samym adresem.
 
 ## Najważniejsze funkcje
 
-Reguła organizacyjna aplikacji wymaga **dokładnie 5 dni pracy w tygodniu
+Domyślna reguła organizacyjna aplikacji wymaga **dokładnie 5 dni pracy w tygodniu
 poniedziałek–niedziela**, a nie samego maksimum 5. Czterodniowy wyjątek nie jest
 włączany automatycznie. Art. 42c Karty Nauczyciela przewiduje pięciodniowy
 tydzień dla pełnego wymiaru oraz określone wyjątki wymagające decyzji dyrektora
@@ -266,7 +276,7 @@ backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --por
 ## Dane demonstracyjne
 
 1. Otwórz stronę startową.
-2. Wybierz **Otwórz demonstrację**.
+2. W zakładce **Reguły** rozwiń narzędzia demonstracyjne i wybierz **Otwórz demonstrację**.
 3. Przejdź do **Podsumowania** i wybierz **Sprawdź i wygeneruj harmonogram**.
 4. Jeśli dane są poprawne, aplikacja sama uruchomi generator.
 5. Otwórz **Raport walidacji**.

@@ -9,6 +9,10 @@ import {
   StatusBadge,
 } from "../components/UI";
 import { useAppState } from "../state/AppState";
+import { RuleFields } from "../components/RuleFields";
+import { SectionTiles } from "../components/SectionTiles";
+import { productionProfile, verificationLocalInput } from "../productionProfile";
+import { BEFORE_IMPORT_STORAGE_KEY, createProjectTransferPackage } from "../transfer";
 import {
   formatPolishHours,
   hoursToMinutes,
@@ -32,6 +36,9 @@ const duration = (optional = false) =>
 
 const schema = z
   .object({
+    requestedOperationMode: z.enum(["PRODUCTION","DEMONSTRATION"]),
+    weeklyRestAnchorDayOfWeek: z.number().int().min(0).max(6),
+    weeklyRestAnchorTime: z.string().regex(/^\d{2}:\d{2}$/),
     verificationStatus: z.enum(["UNVERIFIED", "VERIFIED", "EXPIRED"]),
     jurisdiction: z.string(),
     sourceTitle: z.string(),
@@ -70,6 +77,7 @@ const schema = z
     maximumAbsoluteDailyWorkHours: duration(true),
     maximumAbsoluteSegmentHours: duration(true),
     preferredAfternoonHandoverTime: z.string(),
+    requiredWorkDaysPerWeek: z.number().int().min(1).max(7),
     preferredMaximumSegmentHours: duration(),
     preferredWeekendSplitHours: duration(),
     afternoonHandoverPenaltyWeight: z.number().int().nonnegative(),
@@ -144,25 +152,24 @@ const optionalMinutes = (value: string) =>
   value.trim() ? requiredMinutes(value) : null;
 
 export function RulesPage() {
-  const { configuration, setConfiguration } = useAppState();
+  const { configuration, setConfiguration, loadDemo, busy, generation, inputReport } = useAppState();
   const {
     register,
     reset,
+    getValues,
     handleSubmit,
     watch,
     formState: { errors },
   } = useForm<Values>({ resolver: zodResolver(schema) });
-  const exceptionEnabled = watch("weeklyRestExceptionEnabled", false);
-  const compensationRequired = watch(
-    "weeklyRestCompensationRequired",
-    false,
-  );
 
   useEffect(() => {
     if (!configuration) return;
     const legal = configuration.legalRules;
     const org = configuration.organizationalRules;
     reset({
+      requestedOperationMode: configuration.requestedOperationMode,
+      weeklyRestAnchorDayOfWeek: legal.weeklyRestAnchorDayOfWeek,
+      weeklyRestAnchorTime: legal.weeklyRestAnchorTime,
       verificationStatus: legal.verificationStatus,
       jurisdiction: legal.jurisdiction,
       sourceTitle: legal.sourceTitle,
@@ -170,7 +177,7 @@ export function RulesPage() {
       sourceIdentifier: legal.sourceIdentifier,
       version: legal.version,
       verificationNotes: legal.verificationNotes,
-      verifiedAt: legal.verifiedAt?.slice(0, 16) ?? "",
+      verifiedAt: verificationLocalInput(legal.verifiedAt),
       effectiveFrom: legal.effectiveFrom ?? "",
       effectiveTo: legal.effectiveTo ?? "",
       approvedBy: legal.approvedBy ?? "",
@@ -215,6 +222,7 @@ export function RulesPage() {
       ),
       preferredAfternoonHandoverTime:
         org.preferredAfternoonHandoverTime,
+      requiredWorkDaysPerWeek: org.requiredWorkDaysPerWeek,
       preferredMaximumSegmentHours: displayDuration(
         org.preferredMaximumSegmentMinutes,
       ),
@@ -233,14 +241,17 @@ export function RulesPage() {
   }, [configuration, reset]);
 
   if (!configuration) {
-    return <EmptyState>Najpierw utwórz konfigurację.</EmptyState>;
+    return <section><EmptyState>Najpierw utwórz konfigurację na stronie Start.</EmptyState><details><summary>Narzędzia testowe — demonstracja</summary><button disabled={busy} onClick={()=>void loadDemo()}>Otwórz demonstrację</button></details></section>;
   }
 
   const submit = (values: Values) => {
     setConfiguration({
       ...configuration,
+      requestedOperationMode: values.requestedOperationMode,
       legalRules: {
         ...configuration.legalRules,
+        weeklyRestAnchorDayOfWeek: values.weeklyRestAnchorDayOfWeek,
+        weeklyRestAnchorTime: values.weeklyRestAnchorTime,
         verificationStatus: values.verificationStatus,
         jurisdiction: values.jurisdiction,
         sourceTitle: values.sourceTitle,
@@ -272,27 +283,17 @@ export function RulesPage() {
           values.weeklyRestReuseAcrossWindowsAllowed,
         weeklyRestExceptionEnabled: values.weeklyRestExceptionEnabled,
         weeklyRestExceptionMinimumMinutes:
-          values.weeklyRestExceptionEnabled
-            ? optionalMinutes(values.weeklyRestExceptionMinimumHours)
-            : null,
+          optionalMinutes(values.weeklyRestExceptionMinimumHours),
         weeklyRestExceptionMaximumOccurrencesPerCycle:
-          values.weeklyRestExceptionEnabled
-            ? values.weeklyRestExceptionMaximumOccurrencesPerCycle
-            : null,
+          values.weeklyRestExceptionMaximumOccurrencesPerCycle,
         weeklyRestExceptionMinimumGapMinutes:
-          values.weeklyRestExceptionEnabled
-            ? optionalMinutes(values.weeklyRestExceptionMinimumGapHours)
-            : null,
+          optionalMinutes(values.weeklyRestExceptionMinimumGapHours),
         weeklyRestCompensationRequired:
           values.weeklyRestCompensationRequired,
         weeklyRestCompensationMinutes:
-          values.weeklyRestCompensationRequired
-            ? optionalMinutes(values.weeklyRestCompensationHours)
-            : null,
+          optionalMinutes(values.weeklyRestCompensationHours),
         weeklyRestCompensationDeadlineMinutes:
-          values.weeklyRestCompensationRequired
-            ? optionalMinutes(values.weeklyRestCompensationDeadlineHours)
-            : null,
+          optionalMinutes(values.weeklyRestCompensationDeadlineHours),
         maximumAbsoluteDailyWorkMinutes: optionalMinutes(
           values.maximumAbsoluteDailyWorkHours,
         ),
@@ -302,6 +303,7 @@ export function RulesPage() {
       },
       organizationalRules: {
         ...configuration.organizationalRules,
+        requiredWorkDaysPerWeek: values.requiredWorkDaysPerWeek,
         preferredAfternoonHandoverTime:
           values.preferredAfternoonHandoverTime,
         preferredMaximumSegmentMinutes: requiredMinutes(
@@ -322,12 +324,11 @@ export function RulesPage() {
     });
   };
 
-  const hourInput = (name: keyof Values, disabled = false) => (
+  const hourInput = (name: keyof Values) => (
     <input
       type="text"
       inputMode="decimal"
       step="0.5"
-      disabled={disabled}
       {...register(name)}
     />
   );
@@ -341,7 +342,7 @@ export function RulesPage() {
       <PageHeader
         eyebrow="KROK 06 · OGRANICZENIA"
         title="Reguły organizacyjne i profil prawny"
-        description="Możesz zapisać kompletny profil VERIFIED. Backend dopuści tryb rzeczywisty tylko wtedy, gdy pełny ślad i okres obowiązywania przejdą walidację."
+        description="Pola pozostają edytowalne. Czerwone ostrzeżenie sygnalizuje ryzyko; zatwierdzenie użytkownika nie jest opinią prawną. Każda reguła ma rozwijane objaśnienie skutków."
       />
       <div className="profile-banner">
         <div>
@@ -362,6 +363,7 @@ export function RulesPage() {
         onSubmit={handleSubmit(submit)}
         noValidate
       >
+        <RuleFields values={watch()}><SectionTiles>
         <section className="form-card">
           <div className="section-heading">
             <div>
@@ -374,7 +376,7 @@ export function RulesPage() {
               Status weryfikacji
               <select {...register("verificationStatus")}>
                 <option value="UNVERIFIED">UNVERIFIED</option>
-                <option value="VERIFIED">VERIFIED</option>
+                <option value="VERIFIED">Zatwierdzony przez użytkownika (VERIFIED)</option>
                 <option value="EXPIRED">EXPIRED</option>
               </select>
             </label>
@@ -444,6 +446,7 @@ export function RulesPage() {
               {hourInput("minimumDailyRestHours")}
               {fieldError("minimumDailyRestHours")}
             </label>
+            <label>Dni pracy w tygodniu<input type="number" min="1" max="7" {...register("requiredWorkDaysPerWeek",{valueAsNumber:true})}/>{fieldError("requiredWorkDaysPerWeek")}</label>
             <label>
               Odpoczynek tygodniowy
               {hourInput("minimumWeeklyRestHours")}
@@ -469,12 +472,10 @@ export function RulesPage() {
               {fieldError("weeklyRestWindowStepHours")}
             </label>
             <label>
-              Kotwica
-              <input
-                value={`${configuration.legalRules.weeklyRestAnchorDayOfWeek} · ${configuration.legalRules.weeklyRestAnchorTime}`}
-                readOnly
-              />
+              Początek tygodnia kontroli
+              <select {...register("weeklyRestAnchorDayOfWeek",{valueAsNumber:true})}>{["Poniedziałek","Wtorek","Środa","Czwartek","Piątek","Sobota","Niedziela"].map((d,i)=><option key={d} value={i}>{d}</option>)}</select>
             </label>
+            <label>Godzina granicy tygodnia<input type="time" {...register("weeklyRestAnchorTime")}/></label>
             <label>
               Sposób przypisania
               <select {...register("weeklyRestAttributionMode")}>
@@ -525,7 +526,6 @@ export function RulesPage() {
               Minimum wyjątku
               {hourInput(
                 "weeklyRestExceptionMinimumHours",
-                !exceptionEnabled,
               )}
               {fieldError("weeklyRestExceptionMinimumHours")}
             </label>
@@ -534,7 +534,6 @@ export function RulesPage() {
               <input
                 type="number"
                 min="0"
-                disabled={!exceptionEnabled}
                 {...register(
                   "weeklyRestExceptionMaximumOccurrencesPerCycle",
                   {
@@ -551,7 +550,6 @@ export function RulesPage() {
               Minimalny odstęp wyjątków
               {hourInput(
                 "weeklyRestExceptionMinimumGapHours",
-                !exceptionEnabled,
               )}
               {fieldError("weeklyRestExceptionMinimumGapHours")}
             </label>
@@ -566,7 +564,6 @@ export function RulesPage() {
               Wymiar kompensacji
               {hourInput(
                 "weeklyRestCompensationHours",
-                !compensationRequired,
               )}
               {fieldError("weeklyRestCompensationHours")}
             </label>
@@ -574,7 +571,6 @@ export function RulesPage() {
               Termin kompensacji
               {hourInput(
                 "weeklyRestCompensationDeadlineHours",
-                !compensationRequired,
               )}
               {fieldError("weeklyRestCompensationDeadlineHours")}
             </label>
@@ -629,6 +625,22 @@ export function RulesPage() {
             ))}
           </div>
         </section>
+        </SectionTiles></RuleFields>
+        <button type="button" className="button button--secondary" onClick={()=>{
+          const p=productionProfile(configuration).legalRules;
+          const local=verificationLocalInput(p.verifiedAt);
+          reset({...getValues(),requestedOperationMode:"PRODUCTION",verificationStatus:p.verificationStatus,approvedBy:p.approvedBy??"",verifiedAt:local,effectiveFrom:p.effectiveFrom??"",effectiveTo:p.effectiveTo??"",sourceTitle:p.sourceTitle,sourceIdentifier:p.sourceIdentifier,sourceSection:p.sourceSection,version:p.version,verificationNotes:p.verificationNotes});
+        }}>Ustaw zatwierdzenie: Jarosław Dymek, dzisiaj, na rok</button>
+        <p className="muted">Przycisk uzupełnia formularz bez kasowania wpisanych parametrów. Zatwierdź zmiany przyciskiem „Zapisz reguły”. To zatwierdzenie użytkownika, nie certyfikat zgodności prawnej.</p>
+        <details className="section-tile"><summary>Tryb pracy i narzędzia demonstracyjne</summary>
+          <label>Tryb pracy<select {...register("requestedOperationMode")}><option value="PRODUCTION">Rzeczywisty</option><option value="DEMONSTRATION">Demonstracyjny</option></select></label>
+          <p>Tryb demonstracyjny służy wyłącznie do testów. Nie potwierdza zgodności prawnej.</p>
+          <details className="rule-hint"><summary>Co zmienia tryb pracy?</summary><p>Rzeczywisty wymaga zatwierdzonego i ważnego profilu. Demonstracyjny pozwala sprawdzać przykładowe dane bez tego zatwierdzenia; wynik jest wyraźnie oznaczony jako demonstracja. Zmiana trybu nie usuwa nazwisk ani godzin, ale wymaga ponownego sprawdzenia planu. Wczytanie demonstracji poniżej jest osobną czynnością.</p></details>
+          <button type="button" disabled={busy} onClick={()=>{
+            if(!window.confirm("Wczytać osobny przykład zamiast bieżącego projektu? Najpierw zostanie zachowana lokalna kopia konfiguracji.")) return;
+            try {localStorage.setItem(BEFORE_IMPORT_STORAGE_KEY,JSON.stringify(createProjectTransferPackage(configuration,inputReport,generation))); void loadDemo();} catch {window.alert("Nie udało się utworzyć kopii. Pobierz projekt przed demonstracją.");}
+          }}>Otwórz demonstrację</button>
+        </details>
         <div className="align-right">
           <button className="button button--primary" type="submit">
             Zapisz reguły

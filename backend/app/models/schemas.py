@@ -157,6 +157,7 @@ class Educator(APIModel):
     description: str = ""
     active: bool = True
     can_work_weekends: bool = True
+    prefer_single_daily_visit: bool = False
 
 
 class EducatorWeekAssignmentOverride(APIModel):
@@ -367,7 +368,7 @@ class WeekendDaysOffPattern(APIModel):
     # Validate semantic mistakes as actionable domain messages, not opaque 422s.
     days_off: list[int] = Field(default_factory=list)
     active: bool = True
-    mode: Literal["FIXED", "PREFER_CONSECUTIVE"] = "FIXED"
+    mode: Literal["FIXED", "PREFER_CONSECUTIVE", "PREFER_AFTER_FREE_WEEKEND"] = "FIXED"
 
 
 class ScheduleConfiguration(APIModel):
@@ -375,6 +376,7 @@ class ScheduleConfiguration(APIModel):
     schema_version: int = Field(default=3, ge=2)
     project_id: str
     project_name: str
+    initial_template_needs_review: bool = False
     configuration_version_id: str
     version_number: int = Field(ge=1)
     group_count: int = Field(default=1, ge=1, le=8)

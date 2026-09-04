@@ -197,9 +197,16 @@ def weekend_days_off_messages(configuration, assignments=None, *, care=None):
             monday = configuration.cycle_start_date + timedelta(days=7 * week)
             if not any(monday + timedelta(days=d) in person_work for d in (5, 6)):
                 continue
-            if pattern.mode == "PREFER_CONSECUTIVE":
+            if pattern.mode != "FIXED":
                 if assignments is not None:
-                    free = [d for d in range(7) if monday + timedelta(days=d) not in person_work]
+                    free = [d for d in range(5) if monday + timedelta(days=d) not in person_work]
+                    if pattern.mode == "PREFER_AFTER_FREE_WEEKEND" and (week > 0 or configuration.schedule_boundary_mode == "CYCLIC"):
+                        previous = monday if week > 0 else configuration.cycle_start_date + timedelta(days=7*configuration.planning_horizon_weeks)
+                        if not any(previous-timedelta(days=d) in person_work for d in (1,2)) and not {0,1}.issubset(free):
+                            messages.append(warning("PREF-CONSECUTIVE-DAYS-OFF",
+                                f"{educators[pattern.educator_id].display_name}, tydzień {week+1}: po wolnej sobocie i niedzieli nie udało się uzyskać wolnego w poniedziałek i wtorek. Wybrano inny układ zgodny z wymaganymi warunkami; to preferencja, nie błąd planu.",
+                                educator_id=pattern.educator_id,date_value=monday,
+                                context={"patternId":pattern.id,"weekNumber":week+1,"freeDays":free,"preferredPair":[0,1]}))
                     if not any(d + 1 in free for d in free):
                         name = educators[pattern.educator_id].display_name
                         messages.append(warning("PREF-CONSECUTIVE-DAYS-OFF",

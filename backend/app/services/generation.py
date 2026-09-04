@@ -33,6 +33,7 @@ def _solve_once(configuration: ScheduleConfiguration, care, *, optimize: bool = 
         or bool(configuration.locked_assignments)
         or bool(configuration.required_assignments)
         or bool(configuration.weekend_days_off_patterns)
+        or any(e.prefer_single_daily_visit for e in configuration.educators if e.active)
     )
     if use_internat_solver:
         return solve_internat_schedule(configuration, care, optimize=optimize)
@@ -62,8 +63,10 @@ def _diagnose_no_solution(
     """
     educator_by_id = {item.id: item for item in configuration.educators}
     deadline = monotonic() + min(6.0, configuration.solver_time_limit_seconds)
+    probe_assignments = []
 
     def attempt(candidate: ScheduleConfiguration) -> bool:
+        nonlocal probe_assignments
         remaining = deadline - monotonic()
         if remaining <= 0:
             return False
@@ -71,7 +74,20 @@ def _diagnose_no_solution(
             3.0,
             remaining,
         )
-        return _solve_once(candidate, care).status == GenerationStatus.CANDIDATE_FOUND
+        probe = _solve_once(candidate, care)
+        probe_assignments = probe.assignments
+        return probe.status == GenerationStatus.CANDIDATE_FOUND
+
+    def concrete_probe_messages(rule_id: str) -> list[DomainMessage]:
+        # Diagnostic example against ORIGINAL requirements, not a publishable
+        # plan or proof of the unique cause of infeasibility.
+        report = validate_schedule(configuration, probe_assignments, care)
+        return [message.model_copy(update={
+            "message": "W pomocniczej próbie ułożenia planu wystąpił konflikt: " + message.message +
+                " To przykład wymagający sprawdzenia, nie dowód, że tylko ten wpis blokuje cały plan. "
+                "Próba nie została zapisana jako harmonogram. Sprawdź wskazane dyżury i ich obsadę; nie obniżaj odpoczynku w ciemno.",
+            "context": {**message.context, "diagnosticExample": True},
+        }) for message in report.messages if message.rule_id == rule_id and message.severity == "ERROR"][:8]
 
     for pattern in configuration.weekend_days_off_patterns:
         if not pattern.active or pattern.mode != "FIXED":
@@ -240,6 +256,9 @@ def _diagnose_no_solution(
     no_daily_rest = configuration.model_copy(deep=True)
     no_daily_rest.legal_rules.minimum_daily_rest_minutes = 0
     if attempt(no_daily_rest):
+        concrete = concrete_probe_messages(rules.RULE_REST_DAILY)
+        if concrete:
+            return concrete
         required = configuration.legal_rules.minimum_daily_rest_minutes
         return [
             error(
@@ -255,16 +274,20 @@ def _diagnose_no_solution(
             )
         ]
 
-    for work_days in (4, 6):
+    configured_days = configuration.organizational_rules.required_work_days_per_week
+    for work_days in (d for d in (configured_days-1, configured_days+1) if 1 <= d <= 7):
         candidate = configuration.model_copy(deep=True)
         candidate.organizational_rules.required_work_days_per_week = work_days
         if attempt(candidate):
+            concrete = concrete_probe_messages(rules.RULE_DAYS)
+            if concrete:
+                return concrete
             return [
                 error(
                     rules.RULE_DAYS,
                     (
                         "Suma godzin jest poprawna, ale nie da się jej rozłożyć "
-                        "na dokładnie pięć dni pracy osób podstawowych i stały plan osoby pomocniczej przy obecnych "
+                        f"na wymagane {configuration.organizational_rules.required_work_days_per_week} dni pracy osób podstawowych i stały plan osoby pomocniczej przy obecnych "
                         "nockach, weekendach i niedostępności. Sprawdź osobę z "
                         "największą liczbą zablokowanych dni."
                     ),

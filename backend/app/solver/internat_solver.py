@@ -469,6 +469,8 @@ def solve_internat_schedule(
 
     works_day: dict[tuple[int, int], cp_model.IntVar] = {}
     global_starts: list[cp_model.IntVar] = []
+    prefer_visits = any(e.prefer_single_daily_visit for e in educators)
+    weighted_starts, weighted_care_days = [], []
     for index in range(len(educators)):
         for day_index in range(total_days):
             values = [
@@ -485,13 +487,19 @@ def solve_internat_schedule(
                 model.add(work_day == 1)
             else:
                 model.add_max_equality(work_day, values)
-            for slot, current in enumerate(values if optimize else []):
+            weight = 3 if educators[index].prefer_single_daily_visit else 1
+            if optimize or prefer_visits:
+                care_day = model.new_bool_var(f"care_day_{index}_{day_index}")
+                model.add_max_equality(care_day, values)
+                weighted_care_days.append(weight * care_day)
+            for slot, current in enumerate(values if optimize or prefer_visits else []):
                 previous = values[slot - 1] if slot else 0
                 start = model.new_bool_var(f"global_start_{index}_{day_index}_{slot}")
                 model.add(start >= current - previous)
                 model.add(start <= current)
                 model.add(start <= 1 - previous)
                 global_starts.append(start)
+                weighted_starts.append(weight * start)
         for week_index in range(total_weeks):
             weekly_workdays = sum(
                 works_day[(index, day_index)]
@@ -508,6 +516,7 @@ def solve_internat_schedule(
                     == configuration.organizational_rules.required_work_days_per_week
                 )
 
+    split_expression = sum(weighted_starts) - sum(weighted_care_days)
     # One personal pattern across all groups. A night touching Saturday/Sunday
     # triggers it too, since works_day includes the entire fixed-work calendar.
     off_assumptions = {}
@@ -520,9 +529,9 @@ def solve_internat_schedule(
             offset = week_index * 7
             weekend_work = model.new_bool_var(f"weekend_work_{pattern.id}_{week_index}")
             model.add_max_equality(weekend_work, [works_day[(index, offset + d)] for d in (5, 6)])
-            if pattern.mode == "PREFER_CONSECUTIVE":
+            if pattern.mode != "FIXED":
                 pairs = []
-                for day in range(6):
+                for day in range(4):
                     pair = model.new_bool_var(f"free_pair_{pattern.id}_{week_index}_{day}")
                     first, second = works_day[index, offset + day], works_day[index, offset + day + 1]
                     model.add(pair <= 1 - first)
@@ -536,6 +545,15 @@ def solve_internat_schedule(
                 model.add(missed <= weekend_work)
                 model.add(missed <= 1 - has_pair)
                 consecutive_penalties.append(missed)
+                if pattern.mode == "PREFER_AFTER_FREE_WEEKEND" and (week_index > 0 or cyclic):
+                    previous_work = model.new_bool_var(f"previous_weekend_work_{pattern.id}_{week_index}")
+                    model.add_max_equality(previous_work, [works_day[index, (offset-d) % total_days] for d in (1,2)])
+                    monday_missed = model.new_bool_var(f"monday_pair_missed_{pattern.id}_{week_index}")
+                    model.add(monday_missed >= weekend_work - previous_work - pairs[0])
+                    model.add(monday_missed <= weekend_work)
+                    model.add(monday_missed <= 1-previous_work)
+                    model.add(monday_missed <= 1-pairs[0])
+                    consecutive_penalties.append(monday_missed)
             else:
                 assumption = model.new_bool_var(f"required_off_{pattern.id}_{week_index}")
                 model.add_assumption(assumption)
@@ -566,19 +584,23 @@ def solve_internat_schedule(
         return result
 
     def improve_days_off(solver, status, deadline):
-        if not consecutive_penalties or status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        if (not consecutive_penalties and not prefer_visits) or status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             return solver, status
         remaining = min(8.0, deadline - monotonic())
-        if remaining <= 0 or solver.value(sum(consecutive_penalties)) == 0:
+        # Days off retain priority. The multiplier exceeds every possible
+        # weighted split cost, including all selected groups together.
+        bound = 3 * len(educators) * total_days * rules.SLOTS_PER_DAY + 1
+        preference = sum(consecutive_penalties) * bound + (split_expression if prefer_visits else 0)
+        if remaining <= 0 or solver.value(preference) == 0:
             return solver, status
-        model.minimize(sum(consecutive_penalties))
+        model.minimize(preference)
         preferred_solver = cp_model.CpSolver()
         preferred_solver.parameters.max_time_in_seconds = remaining
         preferred_solver.parameters.num_search_workers = 1
         preferred_solver.parameters.random_seed = configuration.random_seed
         preferred_status = preferred_solver.solve(model)
         if preferred_status in (cp_model.OPTIMAL, cp_model.FEASIBLE) and (
-            preferred_solver.value(sum(consecutive_penalties)) <= solver.value(sum(consecutive_penalties))
+            preferred_solver.value(preference) <= solver.value(preference)
         ):
             return preferred_solver, preferred_status
         return solver, status
@@ -768,14 +790,6 @@ def solve_internat_schedule(
                 model.add(over >= sum(window) - preferred_segment_slots)
                 long_terms.append(over)
 
-    # Dodatkowe odcinki w dniu: liczba globalnych startów minus dzień pracy.
-    care_work_days = []
-    for index in range(len(educators)):
-        for day in range(total_days):
-            care_day = model.new_bool_var(f"care_day_{index}_{day}")
-            model.add_max_equality(care_day, [global_x[index, day, slot] for slot in range(rules.SLOTS_PER_DAY)])
-            care_work_days.append(care_day)
-    split_expression = sum(global_starts) - sum(care_work_days)
     canonical_terms: list[cp_model.LinearExpr] = []
     for (group_id, index, day_index, slot), variable in x.items():
         group_order = group_ids.index(group_id)

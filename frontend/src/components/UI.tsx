@@ -188,6 +188,7 @@ export function MessagesTable({
                 <div>
                   <h3>{guidance.title}</h3>
                   <p>{guidance.explanation}</p>
+                  {guidance.explanation!==message.message&&<p className="repair-specific">{message.message}</p>}
                 </div>
               </div>
               {context.length > 0 && (

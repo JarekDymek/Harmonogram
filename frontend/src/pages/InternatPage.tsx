@@ -1,3 +1,4 @@
+import { SectionTiles } from "../components/SectionTiles";
 import { useMemo, useState } from "react";
 import { DAY_NAMES, EmptyState, MessagesTable, PageHeader, StatusBadge, formatMinutes, minutesToTime } from "../components/UI";
 import { useAppState } from "../state/AppState";
@@ -33,7 +34,7 @@ export function InternatPage() {
   const duties = calendarDuties(configuration).filter(d => weekDates.includes(d.date));
 
   return (
-    <>
+    <SectionTiles>
       <PageHeader
         eyebrow="WIDOK GLOBALNY"
         title="Cały internat"
@@ -127,6 +128,6 @@ export function InternatPage() {
           )}
         />
       </section>
-    </>
+    </SectionTiles>
   );
 }

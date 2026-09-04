@@ -34,6 +34,7 @@ export interface Educator {
   description: string;
   active: boolean;
   canWorkWeekends: boolean;
+  preferSingleDailyVisit?: boolean;
 }
 
 export interface GroupEducatorMembership {
@@ -228,6 +229,7 @@ export interface ScheduleConfiguration {
   schemaVersion: number;
   projectId: string;
   projectName: string;
+  initialTemplateNeedsReview?: boolean;
   configurationVersionId: string;
   versionNumber: number;
   groupCount: number;
@@ -280,7 +282,7 @@ export interface WeekendDaysOffPattern {
   educatorId: string;
   daysOff: number[];
   active: boolean;
-  mode?: "FIXED" | "PREFER_CONSECUTIVE";
+  mode?: "FIXED" | "PREFER_CONSECUTIVE" | "PREFER_AFTER_FREE_WEEKEND";
 }
 
 export interface DomainMessage {
