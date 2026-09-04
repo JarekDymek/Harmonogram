@@ -1,3 +1,4 @@
+import { SectionTiles } from "../components/SectionTiles";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { EmptyState, PageHeader, StatusBadge } from "../components/UI";
@@ -202,7 +203,7 @@ export function WeekendsPage() {
   });
 
   return (
-    <>
+    <SectionTiles>
       <PageHeader
         eyebrow="KROK 05 · WEEKENDY"
         title="Weekendy i stałe dni wolne"
@@ -522,6 +523,6 @@ export function WeekendsPage() {
           </p>
         )}
       </section>
-    </>
+    </SectionTiles>
   );
 }

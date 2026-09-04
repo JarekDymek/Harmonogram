@@ -1,3 +1,4 @@
+import { SectionTiles } from "../components/SectionTiles";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { EmptyState, PageHeader, StatusBadge, formatMinutes } from "../components/UI";
@@ -322,7 +323,7 @@ export function EducatorsPage() {
   };
 
   return (
-    <>
+    <SectionTiles>
       <PageHeader
         eyebrow="KROK 03 · GLOBALNY REJESTR"
         title="Wychowawcy internatu"
@@ -417,6 +418,10 @@ export function EducatorsPage() {
                 <div className="person-card__title"><span>{membership.role === "PRIMARY" ? "Podstawowy" : "Uzupełniający"}</span><StatusBadge value={membership.role} /></div>
                 <label>Imię i nazwisko<input value={educator.displayName} onChange={(event) => updateEducator(educator.id, "displayName", event.target.value)} /></label>
                 <label>Skrót<input value={educator.shortCode} onChange={(event) => updateEducator(educator.id, "shortCode", event.target.value)} /></label>
+                <label className="check-field"><input type="checkbox" checked={!!educator.preferSingleDailyVisit}
+                  onChange={event=>setConfiguration({...configuration,educators:configuration.educators.map(e=>e.id===educator.id?{...e,preferSingleDailyVisit:event.target.checked}:e)})}/>
+                  Preferuj jeden przyjazd dziennie</label>
+                <details className="rule-hint"><summary>Jak ograniczamy dojazdy?</summary><p>Generator stara się łączyć dyżury tej osoby w jeden ciągły blok, wspólnie we wszystkich dołączonych grupach. Dodatkowy odcinek ma trzykrotnie większy koszt niż u osoby bez tej preferencji. Nie jest to zakaz dwóch dyżurów: wymagane godziny, odpoczynki i stałe wpisy mają pierwszeństwo. Praca poza internatem nie jest traktowana jako dojazd do internatu.</p></details>
                 <label>
                   Rola w tej grupie
                   <select
@@ -584,6 +589,6 @@ export function EducatorsPage() {
         </div>
         {nightMessage && <p className="form-message" role="status">{nightMessage}</p>}
       </section>
-    </>
+    </SectionTiles>
   );
 }

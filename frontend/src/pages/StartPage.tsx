@@ -6,7 +6,7 @@ import { useAppState } from "../state/AppState";
 
 export function StartPage() {
   const navigate = useNavigate();
-  const { configuration, loadDemo, startNew, busy } = useAppState();
+  const { configuration, startNew, busy } = useAppState();
   const [apiUrl, setApiUrl] = useState(getApiBaseUrl);
   const [apiStatus, setApiStatus] = useState<
     "idle" | "checking" | "online" | "offline"
@@ -15,8 +15,8 @@ export function StartPage() {
     "Adres pusty oznacza backend dostępny pod tym samym adresem co aplikacja.",
   );
 
-  const begin = async (kind: "new" | "demo") => {
-    const value = kind === "demo" ? await loadDemo() : await startNew();
+  const begin = async () => {
+    const value = await startNew();
     if (value) navigate("/konfiguracja");
   };
 
@@ -68,25 +68,26 @@ export function StartPage() {
             className="button button--light"
             type="button"
             disabled={busy}
-            onClick={() => void begin("new")}
+            onClick={() => void begin()}
           >
             Utwórz konfigurację
           </button>
         </article>
         <article className="action-card">
           <span className="card-number">02</span>
-          <h2>Dane demonstracyjne</h2>
+          <h2>Przygotowanie krok po kroku</h2>
           <p>
-            Wczytaj wykonalny, tygodniowy harmonogram A–B–C w trybie
-            skończonym, z jawnym profilem testowym.
+            Nowy projekt działa w trybie rzeczywistym. Przewodnik pokaże,
+            które sekcje wymagają uzupełnienia. Przykłady testowe znajdziesz
+            osobno w zakładce Reguły.
           </p>
           <button
             className="button button--secondary"
             type="button"
             disabled={busy}
-            onClick={() => void begin("demo")}
+            onClick={() => navigate("/reguly")}
           >
-            Otwórz demonstrację
+            Zobacz reguły i podpowiedzi
           </button>
         </article>
       </section>

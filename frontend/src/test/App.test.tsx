@@ -38,14 +38,14 @@ describe("główny przepływ interfejsu", () => {
       screen.getByRole("button", { name: "Utwórz konfigurację" }),
     ).toBeEnabled();
     expect(
-      screen.getByRole("button", { name: "Otwórz demonstrację" }),
+      screen.getByRole("button", { name: "Zobacz reguły i podpowiedzi" }),
     ).toBeEnabled();
     expect(
       screen.queryByText("Wyłącznie tryb demonstracyjny"),
     ).not.toBeInTheDocument();
   });
 
-  it("wczytuje demonstrację przez API i przechodzi do konfiguracji", async () => {
+  it("wczytuje demonstrację wyłącznie z narzędzi testowych w Regułach", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -54,16 +54,17 @@ describe("główny przepływ interfejsu", () => {
       }),
     );
     const user = userEvent.setup();
-    renderApp();
+    renderApp("/reguly");
+    await user.click(screen.getByText("Narzędzia testowe — demonstracja"));
     await user.click(
       screen.getByRole("button", { name: "Otwórz demonstrację" }),
     );
     await waitFor(() =>
       expect(
-        screen.getByRole("heading", { name: "Konfiguracja podstawowa" }),
+        screen.getByRole("heading", { name: /Reguły/ }),
       ).toBeInTheDocument(),
     );
-    expect(screen.getByDisplayValue("Grupa testowa")).toBeVisible();
+    expect(JSON.parse(localStorage.getItem("harmonogram-mow-configuration-v3")!).requestedOperationMode).toBe("DEMONSTRATION");
     expect(fetch).toHaveBeenCalledWith(
       "/api/demo",
       expect.objectContaining({
@@ -267,9 +268,9 @@ describe("główny przepływ interfejsu", () => {
       JSON.stringify(configurationFixture),
     );
     renderApp("/reguly");
-    expect(screen.getByLabelText("Minimum wyjątku")).toBeDisabled();
-    expect(screen.getByLabelText("Wymiar kompensacji")).toBeDisabled();
-    expect(screen.getByLabelText("Termin kompensacji")).toBeDisabled();
+    expect(screen.getByLabelText("Minimum wyjątku")).toBeEnabled();
+    expect(screen.getByLabelText("Wymiar kompensacji")).toBeEnabled();
+    expect(screen.getByLabelText("Termin kompensacji")).toBeEnabled();
   });
 
   it("dodaje stałą nockę przez wybór osoby i dnia bez wpisywania dat", async () => {

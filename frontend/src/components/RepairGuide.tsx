@@ -67,6 +67,9 @@ export function RepairGuide({
       <div className="repair-guide__problem">
         <h2 id="repair-guide-title">{guidance.title}</h2>
         <p>{guidance.explanation}</p>
+        <p className="repair-specific"><strong>Konkretnie:</strong> {message.message}</p>
+        <p>{configuration?.groups.find(g=>g.id===message.groupId)?.name} {configuration?.educators.find(e=>e.id===message.educatorId)?.displayName} {message.date} {message.startTime&&`${message.startTime}–${message.endTime??""}`}</p>
+        <ol><li>Otwórz wskazane poniżej miejsce.</li><li>Popraw opisany wpis i zapisz formularz. Jeśli jest obowiązkowy i prawidłowy, zmień powiązaną obsadę, nie usuwaj reguły w ciemno.</li><li>Wybierz „Sprawdź ponownie po poprawce”. Zniknięcie komunikatu potwierdzi naprawę.</li></ol>
       </div>
 
       <div className="repair-guide__options" aria-label="Proponowane sposoby naprawy">

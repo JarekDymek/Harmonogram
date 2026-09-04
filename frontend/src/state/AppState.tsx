@@ -12,6 +12,8 @@ import { api, type GenerationOptions } from "../api";
 import { migrateWorkCalendar } from "../nightDuties";
 import { WORK_RULES_VERSION } from "../workRules";
 import { generatedGroups, planInputs } from "../groupScope";
+import { generationMissing } from "../readiness";
+import { productionProfile } from "../productionProfile";
 import { isBetterPlan, isValidatedPlan } from "../generation";
 import type {
   GenerateResponse,
@@ -372,7 +374,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const result = migrateConfiguration({
       ...template,
       projectId: `PROJECT-${suffix}`,
-      projectName: "Nowy harmonogram MOW",
+        projectName: "Nowy harmonogram MOW",
+        initialTemplateNeedsReview: true,
       configurationVersionId: `CV-${suffix}`,
       requestedOperationMode: "DEMONSTRATION",
       demonstrationNotice:
@@ -386,8 +389,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     result.dayPlans.forEach((item) => (item.configurationVersionId = versionId));
     result.weekendVariants.forEach((item) => (item.configurationVersionId = versionId));
     result.assignmentOverrides.forEach((item) => (item.configurationVersionId = versionId));
-    setConfiguration(result);
-    return result;
+    const production = productionProfile(result);
+    setConfiguration(production);
+    return production;
   }, [run, setConfiguration]);
 
   const validateInput = useCallback(async () => {
@@ -409,6 +413,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const ids = options.groupIds ?? configuration.selectedGroupIds;
     if (!ids.length) { setError("Dołącz co najmniej jedną grupę do generowania."); return null; }
     const requested = options.groupIds ? {...configuration, selectedGroupIds: [...new Set(ids)]} : configuration;
+    const missing = generationMissing(requested);
+    if(missing.length) { setError(`Najpierw uzupełnij: ${missing.map(s=>s.title).join("; ")}. W przewodniku wybierz „Uzupełnij teraz”.`); return null; }
     if (options.groupIds) {
       configurationRef.current = requested;
       setConfigurationState(requested);

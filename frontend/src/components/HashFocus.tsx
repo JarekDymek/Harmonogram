@@ -18,6 +18,12 @@ export function HashFocus() {
       const target = document.getElementById(targetId);
       if (!target) return false;
 
+      let ancestor: HTMLElement | null = target;
+      while (ancestor) {
+        if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
+        ancestor = ancestor.parentElement;
+      }
+
       target.classList.add("repair-target");
       const reduceMotion = window.matchMedia?.(
         "(prefers-reduced-motion: reduce)",

@@ -133,8 +133,9 @@ def calculate_objective(
             for minutes in totals.values()
         )
 
+    visit_weights = {e.id: 3 if e.prefer_single_daily_visit else 1 for e in configuration.educators}
     split_days = sum(
-        max(
+        visit_weights.get(educator_id, 1) * max(
             0,
             len(
                 normalize_pairs(
@@ -143,7 +144,7 @@ def calculate_objective(
             )
             - 1,
         )
-        for values in by_educator_date.values()
+        for (educator_id, _), values in by_educator_date.items()
     )
     long_segments = sum(
         max(

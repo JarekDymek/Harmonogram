@@ -1,3 +1,4 @@
+import { SectionTiles } from "../components/SectionTiles";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -186,7 +187,7 @@ export function PlansPage() {
   });
 
   return (
-    <>
+    <SectionTiles>
       <PageHeader
         eyebrow="KROK 04 · ZAPOTRZEBOWANIE"
         title="Plan pobytu wychowanków"
@@ -404,6 +405,6 @@ export function PlansPage() {
           ))}
         </div>
       </section>
-    </>
+    </SectionTiles>
   );
 }

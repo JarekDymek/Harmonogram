@@ -1,3 +1,4 @@
+import { SectionTiles } from "../components/SectionTiles";
 import { Link, useNavigate } from "react-router-dom";
 import { RepairGuide } from "../components/RepairGuide";
 import {
@@ -10,6 +11,7 @@ import {
   formatMinutes,
 } from "../components/UI";
 import { useAppState } from "../state/AppState";
+import { generationMissing } from "../readiness";
 
 export function SummaryPage() {
   const navigate = useNavigate();
@@ -50,7 +52,7 @@ export function SummaryPage() {
   };
 
   return (
-    <>
+    <SectionTiles>
       <PageHeader
         eyebrow="KROK 07 · KONTROLA WEJŚCIA"
         title="Podsumowanie przed generowaniem"
@@ -59,7 +61,7 @@ export function SummaryPage() {
           <button
             className="button button--primary"
             type="button"
-            disabled={busy}
+            disabled={busy || generationMissing(configuration).length>0}
             onClick={() => void runGeneration()}
           >
             {busy ? "Sprawdzanie i generowanie…" : "Sprawdź i wygeneruj harmonogram"}
@@ -211,6 +213,6 @@ export function SummaryPage() {
           )}
         </>
       )}
-    </>
+    </SectionTiles>
   );
 }

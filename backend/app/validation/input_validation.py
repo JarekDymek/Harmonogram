@@ -218,6 +218,9 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
     org = configuration.organizational_rules
     legal = configuration.legal_rules
 
+    if configuration.initial_template_needs_review and configuration.requested_operation_mode == OperationMode.PRODUCTION:
+        messages.append(error("REQ-TEMPLATE-REVIEW", "Sprawdź przykładowe nazwiska, godziny, plan pobytu i weekendy, a następnie potwierdź przygotowanie własnych danych w Konfiguracji. Dane nie zostały zmienione.", context={"field":"initialTemplateNeedsReview"}))
+
     if configuration.cycle_start_date.weekday() != 0 or configuration.week_start_day != "MONDAY":
         messages.append(
             error(
@@ -264,16 +267,21 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
                 actual=f"{org.time_step_minutes} / {org.minimum_segment_minutes}",
             )
         )
-    if org.required_work_days_per_week != rules.REQUIRED_WORK_DAYS:
+    if not 1 <= org.required_work_days_per_week <= 7:
         messages.append(
             error(
                 rules.RULE_DAYS,
-                "Plan wymaga dokładnie pięciu dni pracy i dwóch dni całkowicie wolnych w tygodniu.",
-                required=5,
+                "Liczba dni pracy musi mieścić się w zakresie od 1 do 7.",
+                required="1–7",
                 actual=org.required_work_days_per_week,
             )
         )
 
+    if 1 <= org.required_work_days_per_week <= 7 and org.required_work_days_per_week != rules.REQUIRED_WORK_DAYS:
+        messages.append(warning("LEGAL-WORK-DAYS-OVERRIDE",
+            f"Ustawiono {org.required_work_days_per_week} dni pracy zamiast standardowych 5. "
+            "Generator użyje tej wartości; poprawność według ustawień nie oznacza zgodności prawnej. Sprawdź podstawę właściwą dla zatrudnienia.",
+            required=5, actual=org.required_work_days_per_week))
     active_educators = [item for item in configuration.educators if item.active]
     if len(active_educators) != configuration.educator_count:
         messages.append(
@@ -562,21 +570,8 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
                     "Włączony wyjątek odpoczynku tygodniowego wymaga pełnej konfiguracji.",
                 )
             )
-    else:
-        unused_exception_values = (
-            legal.weekly_rest_exception_minimum_minutes,
-            legal.weekly_rest_exception_maximum_occurrences_per_cycle,
-            legal.weekly_rest_exception_minimum_gap_minutes,
-        )
-        if any(value is not None for value in unused_exception_values):
-            messages.append(
-                error(
-                    rules.RULE_REST_WEEKLY,
-                    "Wyłączony wyjątek odpoczynku musi mieć puste pola parametrów wyjątku.",
-                    required="null / null / null",
-                    actual=str(unused_exception_values),
-                )
-            )
+    # Inactive parameters are retained as user drafts. Both solver and
+    # independent validator consult the enabling flags before using them.
     if legal.weekly_rest_compensation_required and (
         legal.weekly_rest_compensation_minutes is None
         or legal.weekly_rest_compensation_deadline_minutes is None
@@ -585,16 +580,6 @@ def _structural_messages(configuration: ScheduleConfiguration) -> list[DomainMes
             error(
                 rules.RULE_REST_WEEKLY,
                 "Wymagana kompensacja musi mieć wymiar i termin.",
-            )
-        )
-    if not legal.weekly_rest_compensation_required and (
-        legal.weekly_rest_compensation_minutes is not None
-        or legal.weekly_rest_compensation_deadline_minutes is not None
-    ):
-        messages.append(
-            error(
-                rules.RULE_REST_WEEKLY,
-                "Wyłączona kompensacja musi mieć puste pola wymiaru i terminu.",
             )
         )
     try:
@@ -1100,6 +1085,7 @@ def _fixed_weekend_conflict_messages(
         saturday = configuration.cycle_start_date + timedelta(
             days=(week_number - 1) * 7 + 5
         )
+
         sunday = saturday + timedelta(days=1)
         try:
             variant = selected_weekend_variant(

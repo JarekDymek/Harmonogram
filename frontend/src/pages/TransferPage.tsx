@@ -1,3 +1,4 @@
+import { SectionTiles } from "../components/SectionTiles";
 import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { EmptyState, PageHeader } from "../components/UI";
@@ -208,7 +209,7 @@ export function TransferPage() {
     ) ?? [];
 
   return (
-    <>
+    <SectionTiles>
       <PageHeader
         eyebrow="PRYWATNY PLIK PROJEKTU"
         title="Eksport i import projektu"
@@ -329,6 +330,6 @@ export function TransferPage() {
           {message}
         </p>
       )}
-    </>
+    </SectionTiles>
   );
 }

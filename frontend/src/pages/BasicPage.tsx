@@ -1,3 +1,4 @@
+import { SectionTiles } from "../components/SectionTiles";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -375,7 +376,7 @@ export function BasicPage() {
   };
 
   return (
-    <>
+    <SectionTiles>
       <PageHeader
         eyebrow="KROK 02 · PROJEKT INTERNATU"
         title="Konfiguracja podstawowa"
@@ -426,13 +427,7 @@ export function BasicPage() {
               {[1, 2, 3, 4, 5, 6].map((value) => <option key={value} value={value}>Pozycja {value}</option>)}
             </select>
           </label>
-          <label>
-            Tryb operacji
-            <select {...register("requestedOperationMode")}>
-              <option value="DEMONSTRATION">Tryb demonstracyjny</option>
-              <option value="PRODUCTION">Tryb rzeczywisty</option>
-            </select>
-          </label>
+          <p>Tryb pracy zmienisz w zakładce Reguły → Tryb pracy i narzędzia demonstracyjne.</p>
         </div>
         <section className="group-selection" aria-label="Zakres generowania grup">
           <strong>Grupy generowane wspólnie</strong>
@@ -449,6 +444,9 @@ export function BasicPage() {
           ))}
         </section>
         <div className="profile-summary">
+          {configuration.initialTemplateNeedsReview && <div id="potwierdzenie-danych"><p>Projekt startowy zawiera przykładowe osoby i godziny. Nie wysyłaj go jako rzeczywistego planu, dopóki nie sprawdzisz i nie dostosujesz wszystkich danych.</p><button type="button" className="button button--secondary" onClick={()=>{
+            if(window.confirm("Czy sprawdziłeś nazwiska, godziny, plan pobytu i weekendy oraz zastąpiłeś przykład danymi swojej placówki?")) setConfiguration({...configuration,initialTemplateNeedsReview:false});
+          }}>Potwierdzam przygotowanie własnych danych</button></div>}
           <div><small>Profil prawny</small><strong>{configuration.legalRules.sourceTitle}</strong></div>
           <StatusBadge value={configuration.legalRules.verificationStatus} />
         </div>
@@ -466,6 +464,6 @@ export function BasicPage() {
           <button className="button button--primary" type="submit">Zapisz konfigurację</button>
         </div>
       </form>
-    </>
+    </SectionTiles>
   );
 }
