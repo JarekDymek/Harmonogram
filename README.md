@@ -1,5 +1,12 @@
 # Harmonogram MOW
 
+### Twarde konflikty bez zgadywania (1.7.1)
+
+- Bezwzględna niedostępność pozostaje twardym zakazem pracy. Gdy zestaw takich wpisów uniemożliwia plan, solver zwraca ich dokładne identyfikatory, osobę, dzień, godziny i daty zamiast ogólnego `REQ-NO-GUESSING-001`.
+- Komunikat rozróżnia błędny wpis od poprawnego warunku uczestniczącego w konflikcie. Wskazuje konkretne pozycje weekendowe, w których dana osoba nie ma dyżuru i dlatego musi zmieścić wymiar w zablokowanych dniach roboczych.
+- Naprawa prowadzi najpierw do właściwej grupy i pozycji weekendu, a drugi link do dokładnego wpisu niedostępności. Wejście przez link automatycznie przełącza grupę; listy niedostępności nie mieszają osób z innych grup.
+- Model nie publikuje wyniku naruszającego twardą niedostępność. Test regresyjny sprawdza dokładne wskazanie wpisu, brak fałszywego harmonogramu i niezmienność danych wejściowych.
+
 ### Izolacja grup i pobudki (1.7.0)
 
 - Konfiguracja → Dodaj kolejną grupę → Plik grupy do dołączenia dodaje dane osobno zapisanej grupy, bez zastępowania bieżącego projektu. Aby zachować dobry wynik VI, wczytaj pełny projekt VI, potem dołącz plik VII. Identyczne wewnętrzne G1/A/B/C są remapowane razem z powiązaniami. Wymagane są zgodne daty i parametry reguł; duplikat oznaczenia lub dokładnie tej samej osoby zatrzymuje import zamiast tworzyć ukrytą drugą kopię. Wspólne osoby wymagają osobnego uzgodnienia. Przed zmianą zachowywana jest lokalna kopia obu projektów; brak miejsca przerywa operację. Importowane dane zaczynają poza obliczeniami. Oddzielnych wyników nie uznaje się automatycznie za wspólnie zweryfikowany harmonogram.

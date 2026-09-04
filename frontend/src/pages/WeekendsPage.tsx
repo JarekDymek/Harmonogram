@@ -1,6 +1,7 @@
 import { SectionTiles } from "../components/SectionTiles";
 import { deriveWeekendMetadata } from "../weekendMetadata";
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { EmptyState, PageHeader, StatusBadge } from "../components/UI";
 import { useAppState } from "../state/AppState";
@@ -10,7 +11,8 @@ import { prepareConfigurationForApi } from "../nightDuties";
 import { minutesToTime } from "../components/UI";
 
 export function WeekendsPage() {
-  const { configuration, setConfiguration, inputReport } = useAppState();
+  const location = useLocation();
+  const { configuration, setConfiguration, setActiveGroup, inputReport } = useAppState();
   const [variants, setVariants] = useState<WeekendVariant[]>([]);
   const [daysOffPatterns, setDaysOffPatterns] = useState<WeekendDaysOffPattern[]>([]);
   const [saveMessage, setSaveMessage] = useState("");
@@ -20,6 +22,17 @@ export function WeekendsPage() {
     saturdayDate: string;
     sundayDate: string;
   }>();
+  const requestedGroupId = new URLSearchParams(location.search).get("grupa");
+
+  useEffect(() => {
+    if (
+      requestedGroupId &&
+      configuration?.activeGroupId !== requestedGroupId &&
+      configuration?.groups.some((item) => item.id === requestedGroupId && item.active)
+    ) {
+      setActiveGroup(requestedGroupId);
+    }
+  }, [configuration, requestedGroupId, setActiveGroup]);
 
   useEffect(() => {
     if (configuration) {

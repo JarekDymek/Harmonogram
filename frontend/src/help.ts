@@ -234,6 +234,27 @@ export function getRuleGuidance(
   configuration?: ScheduleConfiguration,
 ): RuleGuidance {
   const ruleId = message.ruleId;
+  if (contextString(message, "conflictType") === "HARD_UNAVAILABILITY_CONFLICT_SET") {
+    const review = Array.isArray(message.context.weekendReview)
+      ? message.context.weekendReview.find((item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === "object")
+      : undefined;
+    const position = typeof review?.positionInCycle === "number"
+      ? review.positionInCycle
+      : null;
+    const groupId = typeof review?.groupId === "string"
+      ? review.groupId
+      : contextString(message, "groupId");
+    return {
+      title: "Twarde warunki tworzą konkretny konflikt",
+      explanation: message.message,
+      destination: position !== null
+        ? `Weekendy → grupa ${String(review?.groupCode ?? "")}, pozycja ${position}`
+        : "Weekendy → obsada wskazanej grupy",
+      actionLabel: position !== null ? "Sprawdź pierwszy kolidujący weekend" : "Sprawdź obsadę weekendów",
+      actionTo: `/weekendy${groupId ? `?grupa=${encodeURIComponent(groupId)}` : ""}${position !== null ? `#weekend-pozycja-${position}` : "#wzorce-weekendowe"}`,
+    };
+  }
   if (contextString(message, "conflictType") === "COMBINED_HARD_RULES") {
     return {
       repairable: false,
@@ -601,6 +622,25 @@ export function getRepairOptions(
           "Wybierz tę możliwość tylko wtedy, gdy zakaz pracy został wpisany błędnie lub ma niewłaściwe godziny.",
         destination: "Wychowawcy → niedostępność wychowawcy",
         actionTo: "/wychowawcy#dostepnosc",
+      },
+    ];
+  }
+
+  if (conflictType === "HARD_UNAVAILABILITY_CONFLICT_SET") {
+    const unavailabilityId = contextString(message, "unavailabilityId");
+    const groupId = contextString(message, "groupId");
+    return [
+      {
+        ...primary,
+        description:
+          "Zacznij od wskazanej pozycji weekendu. Twarda niedostępność pozostanie bez zmian; zmień obsadę tak, aby wymiar godzin dało się rozłożyć na pozostałe dni.",
+      },
+      {
+        label: "Pokaż twardą niedostępność",
+        description:
+          "Sprawdź dokładny dzień i godziny wpisu. Nie usuwaj go, jeżeli jest bezwzględny.",
+        destination: "Wychowawcy → wskazana niedostępność",
+        actionTo: `/wychowawcy${groupId ? `?grupa=${encodeURIComponent(groupId)}` : ""}#${unavailabilityId ? `niedostepnosc-${anchor(unavailabilityId)}` : "dostepnosc"}`,
       },
     ];
   }
