@@ -106,28 +106,17 @@ describe("główny przepływ interfejsu", () => {
     expect(screen.getAllByDisplayValue("Nowy wychowawca uzupełniający")).toHaveLength(1);
   });
 
-  it("tworzy drugą grupę i wymaga potwierdzenia przed jej usunięciem", async () => {
-    localStorage.setItem(
-      "harmonogram-mow-configuration-v3",
-      JSON.stringify(configurationFixture),
-    );
-    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("dodaje konkretną pustą grupę bez zmiany zakresu istniejącej", async () => {
+    localStorage.setItem("harmonogram-mow-configuration-v3", JSON.stringify(configurationFixture));
     const user = userEvent.setup();
     renderApp("/konfiguracja");
-    await user.selectOptions(
-      screen.getByLabelText("Liczba grup w internacie"),
-      "2",
-    );
-    await user.click(screen.getByRole("button", { name: "Zapisz konfigurację" }));
-    expect(screen.getByLabelText("Aktualnie edytowana grupa")).toHaveDisplayValue("I · Grupa testowa");
+    await user.selectOptions(screen.getByLabelText("Oznaczenie nowej grupy"), "VII");
+    await user.click(screen.getByRole("button", {name:"Dodaj pustą grupę"}));
+    expect(screen.getByLabelText("Aktualnie edytowana grupa")).toHaveDisplayValue("VII · Grupa VII");
     expect(screen.getByLabelText("Aktualnie edytowana grupa").querySelectorAll("option")).toHaveLength(2);
-    await user.selectOptions(
-      screen.getByLabelText("Liczba grup w internacie"),
-      "1",
-    );
-    await user.click(screen.getByRole("button", { name: "Zapisz konfigurację" }));
-    expect(confirmation).toHaveBeenCalled();
-    expect(screen.getByLabelText("Liczba grup w internacie")).toHaveValue("2");
+    const saved = JSON.parse(localStorage.getItem("harmonogram-mow-configuration-v3")!);
+    expect(saved.selectedGroupIds).toEqual(["G1"]);
+    expect(screen.queryByLabelText("Liczba grup w internacie")).toBeNull();
   });
 
   it("udostępnia cykl tylko dla horyzontu sześciotygodniowego", async () => {

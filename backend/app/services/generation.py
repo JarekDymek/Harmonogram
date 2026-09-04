@@ -17,33 +17,19 @@ from app.models.schemas import (
 )
 from app.services.objective import calculate_objective
 from app.services.quality import build_quality_report
+from app.services.mornings import morning_distribution_messages
 from app.services.reports import error, info
 from app.services.time_utils import zone
 from app.solver.internat_solver import solve_internat_schedule
-from app.solver.schedule_solver import solve_schedule
 from app.validation.input_validation import validate_configuration
 from app.validation.schedule_validator import validate_schedule
 from app.services.weekend import expected_weekend_position
 
 
 def _solve_once(configuration: ScheduleConfiguration, care, *, optimize: bool = False):
-    use_internat_solver = (
-        len(configuration.active_groups()) > 1
-        or bool(configuration.external_duty_assignments)
-        or bool(configuration.locked_assignments)
-        or bool(configuration.required_assignments)
-        or bool(configuration.weekend_days_off_patterns)
-        or any(e.prefer_single_daily_visit for e in configuration.educators if e.active)
-    )
-    if use_internat_solver:
-        return solve_internat_schedule(configuration, care, optimize=optimize)
-    group = configuration.active_groups()[0]
-    group_configuration = configuration.configuration_for_group(group.id)
-    return solve_schedule(
-        group_configuration,
-        [item for item in care if item.group_id == group.id],
-        optimize=optimize,
-    )
+    # One production path for one through eight groups. Adding a group no longer
+    # changes which implementation of the work-calendar rules is used.
+    return solve_internat_schedule(configuration, care, optimize=optimize)
 
 
 def _recurring_duty_key(duty_id: str) -> str:
@@ -446,6 +432,7 @@ def generate_schedule(
         messages=[
             *input_report.messages,
             *validation.messages,
+            *morning_distribution_messages(configuration, solver_result.assignments),
             *(
                 []
                 if solver_result.optimization_proven

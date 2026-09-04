@@ -244,6 +244,11 @@ export function getRuleGuidance(
       actionTo: "/urzadzenia",
     };
   }
+  if (ruleId === "PREF-MORNING-BALANCE") {
+    return {repairable:false, title:"Plan gotowy — sprawdź podział pobudek",
+      explanation:message.message, destination:"Harmonogram → ulepszanie podziału",
+      actionLabel:"Zobacz gotowy plan", actionTo:"/harmonogram"};
+  }
   if (ruleId === "PREF-CONSECUTIVE-DAYS-OFF") {
     const patternId = contextString(message, "patternId");
     const groupId = configuration?.groupMemberships.find(m => m.active && m.educatorId === message.educatorId)?.groupId;
