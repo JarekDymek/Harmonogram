@@ -1167,6 +1167,12 @@ input[readonly] {
   padding: 1rem;
 }
 
+.record-row:target {
+  border-color: var(--danger, #b94238);
+  box-shadow: 0 0 0 3px rgba(185, 66, 56, 0.18);
+  background: #fff7f5;
+}
+
 .record-row {
   display: flex;
   align-items: center;

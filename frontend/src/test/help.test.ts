@@ -172,6 +172,30 @@ describe("pomoc kontekstowa", () => {
     ]);
   });
 
+  it("prowadzi zestaw twardych konfliktów najpierw do właściwej grupy i weekendu", () => {
+    const unavailableMessage = message("REQ-UNAVAILABLE-HARD-001");
+    unavailableMessage.context = {
+      conflictType: "HARD_UNAVAILABILITY_CONFLICT_SET",
+      unavailabilityId: "HARD-WEDNESDAY",
+      groupId: "G7",
+      weekendReview: [
+        { groupId: "G7", groupCode: "VII", positionInCycle: 2, weekNumber: 2 },
+        { groupId: "G7", groupCode: "VII", positionInCycle: 5, weekNumber: 5 },
+      ],
+    };
+
+    const guidance = getRuleGuidance(unavailableMessage);
+    const options = getRepairOptions(unavailableMessage);
+
+    expect(guidance.title).toContain("konkretny konflikt");
+    expect(guidance.actionTo).toBe("/weekendy?grupa=G7#weekend-pozycja-2");
+    expect(options.map((option) => option.actionTo)).toEqual([
+      "/weekendy?grupa=G7#weekend-pozycja-2",
+      "/wychowawcy?grupa=G7#niedostepnosc-HARD-WEDNESDAY",
+    ]);
+    expect(options[1].description).toContain("Nie usuwaj");
+  });
+
   it("ma instrukcję dla każdego głównego kroku", () => {
     for (const path of [
       "/",

@@ -190,6 +190,39 @@ def test_solver_conflict_set_identifies_fixed_patterns_and_weeks():
     assert all(m.context["weekNumber"] == 1 and m.educator_id for m in result.conflict_messages)
 
 
+def test_solver_conflict_set_identifies_exact_hard_unavailability_records():
+    from app.solver.internat_solver import solve_internat_schedule
+
+    config = demo_configuration()
+    config.unavailability = [
+        EducatorUnavailability(
+            id=f"HARD-{educator}",
+            educator_id=educator,
+            scope=UnavailabilityScope.RECURRING_WEEKLY,
+            day_of_week=0,
+            start_time="06:00",
+            end_time="22:00",
+            type=UnavailabilityType.HARD,
+        )
+        for educator in ("A", "B", "C")
+    ]
+    before = config.model_dump()
+
+    result = solve_internat_schedule(config, calculate_care(config))
+
+    assert result.status == "NO_SOLUTION"
+    assert result.assignments == []
+    messages = [
+        item for item in result.conflict_messages or []
+        if item.context.get("conflictType") == "HARD_UNAVAILABILITY_CONFLICT_SET"
+    ]
+    # C nie pracuje w weekend w tym wzorcu, więc jego poniedziałkowy zakaz
+    # sam wystarcza do wykazania konfliktu pięciu dni pracy.
+    assert {item.context["unavailabilityId"] for item in messages} == {"HARD-C"}
+    assert all(item.context["affectedDates"] and item.educator_id for item in messages)
+    assert config.model_dump() == before
+
+
 def test_preference_counts_both_dates_of_a_night_and_is_only_conditional_on_weekend():
     config = demo_configuration()
     config.weekend_days_off_patterns = [preferred("C")]

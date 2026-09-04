@@ -215,22 +215,34 @@ def solve_internat_schedule(
         for item in care
     }
 
-    hard_slots: dict[tuple[str, int], set[int]] = defaultdict(set)
+    # Twarde niedostępności są założeniami modelu, a nie usuwaniem zmiennych.
+    # Dzięki temu solver nadal traktuje je bezwzględnie, ale przy braku planu
+    # potrafi wskazać dokładny wpis należący do sprzecznego zestawu reguł.
+    hard_unavailability_slots: dict[tuple[str, int], set[int]] = defaultdict(set)
+    hard_unavailability_dates: dict[str, list] = defaultdict(list)
+    hard_unavailability_items = {}
     for item in configuration.unavailability:
         if item.type != UnavailabilityType.HARD:
             continue
+        if item.educator_id not in relevant_educator_ids:
+            continue
+        hard_unavailability_items[item.id] = item
         unavailable = interval_slots(
             normalize_pairs([(parse_hhmm(item.start_time), parse_hhmm(item.end_time))]),
             step=step,
         )
         for day_index, target_date in enumerate(dates):
             if _active_unavailability(item, target_date, day_index // 7 + 1):
-                hard_slots[(item.educator_id, day_index)].update(unavailable)
+                hard_unavailability_slots[(item.id, day_index)].update(unavailable)
+                hard_unavailability_dates[item.id].append(target_date)
 
     x: dict[tuple[str, int, int, int], cp_model.IntVar] = {}
+    # Ograniczenia wynikające z odpoczynku wokół stałej nocki pozostają
+    # bezwarunkowe i nie są prezentowane jako wpis użytkownika do poprawy.
+    night_hard_slots: dict[tuple[str, int], set[int]] = defaultdict(set)
     for educator in educators:
         for day_index, date in enumerate(dates):
-            hard_slots[(educator.id, day_index)].update(
+            night_hard_slots[(educator.id, day_index)].update(
                 slot for slot in range(rules.SLOTS_PER_DAY)
                 if not allowed_beside_night(configuration, educator.id, date,
                                             slot * step, (slot + 1) * step)
@@ -254,7 +266,7 @@ def solve_internat_schedule(
             for slot in care_slots[(group_id, day_index)]:
                 variables: list[cp_model.IntVar] = []
                 for educator_id in member_ids:
-                    if slot in hard_slots[(educator_id, day_index)]:
+                    if slot in night_hard_slots[(educator_id, day_index)]:
                         continue
                     index = educator_index[educator_id]
                     variable = model.new_bool_var(
@@ -264,6 +276,19 @@ def solve_internat_schedule(
                     by_educator_day_slot[(index, day_index, slot)].append(variable)
                     variables.append(variable)
                 model.add(sum(variables) == 1)
+
+    hard_unavailability_assumptions = {}
+    for item_id, item in hard_unavailability_items.items():
+        assumption = model.new_bool_var(f"hard_unavailable_{item_id}")
+        model.add_assumption(assumption)
+        hard_unavailability_assumptions[assumption.index] = item
+        index = educator_index[item.educator_id]
+        for day_index in range(total_days):
+            for slot in hard_unavailability_slots[(item_id, day_index)]:
+                for group_id in group_ids:
+                    variable = x.get((group_id, index, day_index, slot))
+                    if variable is not None:
+                        model.add(variable == 0).only_enforce_if(assumption)
 
     # Required care is coverage, not an external occupancy block.
     for assignment in configuration.required_assignments:
@@ -562,12 +587,18 @@ def solve_internat_schedule(
                 for day in pattern.days_off:
                     model.add(works_day[(index, offset + day)] == 0).only_enforce_if([weekend_work, assumption])
 
-    def off_conflicts(solver):
+    def hard_conflicts(solver):
         from app.validation.weekend_days_off import DAY_NAMES, RULE
-        core = [off_assumptions[key] for key in solver.sufficient_assumptions_for_infeasibility()
-                if key in off_assumptions]
+        core_indexes = set(solver.sufficient_assumptions_for_infeasibility())
+        off_core = [off_assumptions[key] for key in core_indexes if key in off_assumptions]
+        unavailable_core = [
+            hard_unavailability_assumptions[key]
+            for key in core_indexes
+            if key in hard_unavailability_assumptions
+        ]
         result = []
-        for pattern, week_index in core:
+        conflict_set_size = len(off_core) + len(unavailable_core)
+        for pattern, week_index in off_core:
             monday = dates[week_index * 7]
             name = educators[educator_index[pattern.educator_id]].display_name
             days = ", ".join(DAY_NAMES[day] for day in pattern.days_off)
@@ -581,7 +612,91 @@ def solve_internat_schedule(
                 educator_id=pattern.educator_id, date_value=monday,
                 context={"patternId": pattern.id, "weekNumber": week_index + 1,
                          "daysOff": pattern.days_off, "conflictType": "WEEKEND_OFF_CONFLICT_SET",
-                         "conflictSetSize": len(core)}))
+                          "conflictSetSize": conflict_set_size}))
+        recurring_day_phrases = [
+            "w każdy poniedziałek", "w każdy wtorek", "w każdą środę",
+            "w każdy czwartek", "w każdy piątek", "w każdą sobotę",
+            "w każdą niedzielę",
+        ]
+        day_names = ["poniedziałek", "wtorek", "środę", "czwartek", "piątek", "sobotę", "niedzielę"]
+        for item in unavailable_core:
+            educator = educators[educator_index[item.educator_id]]
+            affected = hard_unavailability_dates[item.id]
+            if item.scope == UnavailabilityScope.RECURRING_WEEKLY:
+                when = f"{recurring_day_phrases[item.day_of_week]} {item.start_time}–{item.end_time}"
+            elif item.scope == UnavailabilityScope.CYCLE_WEEK:
+                when = (
+                    f"w tygodniu {item.week_number}, w {day_names[item.day_of_week]} "
+                    f"{item.start_time}–{item.end_time}"
+                )
+            else:
+                when = f"{item.date:%d.%m.%Y} {item.start_time}–{item.end_time}"
+            dates_text = ", ".join(value.strftime("%d.%m") for value in affected)
+            weekend_review = []
+            member_group_ids = [
+                membership.group_id for membership in memberships
+                if membership.educator_id == item.educator_id
+            ]
+            for member_group_id in member_group_ids:
+                member_group = next(group for group in groups if group.id == member_group_id)
+                for week_number in range(1, total_weeks + 1):
+                    saturday_index = (week_number - 1) * 7 + 5
+                    variant = selected_weekend_variant(
+                        configuration.configuration_for_group(member_group_id),
+                        week_number=week_number,
+                        saturday=dates[saturday_index],
+                        sunday=dates[saturday_index + 1],
+                    )
+                    owners = {
+                        educator_id
+                        for template in (variant.saturday_template, variant.sunday_template)
+                        for _, educator_id, _, _ in template_tuples(template)
+                    }
+                    if item.educator_id not in owners:
+                        weekend_review.append({
+                            "groupId": member_group_id,
+                            "groupCode": member_group.code,
+                            "weekNumber": week_number,
+                            "positionInCycle": variant.position_in_cycle,
+                            "saturday": dates[saturday_index].isoformat(),
+                            "sunday": dates[saturday_index + 1].isoformat(),
+                        })
+            weekend_hint = ""
+            if weekend_review:
+                positions = ", ".join(
+                    f"{value['groupCode']}:{value['positionInCycle'] or value['weekNumber']}"
+                    for value in weekend_review
+                )
+                weekend_hint = (
+                    f" Najpierw sprawdź obsadę weekendu w pozycjach {positions}: "
+                    f"{educator.display_name} nie ma tam dyżuru, więc musi zmieścić cały wymiar "
+                    "w dniach roboczych objętych tymi blokadami."
+                )
+            result.append(error(
+                "REQ-UNAVAILABLE-HARD-001",
+                f"{educator.display_name}: bezwzględna niedostępność {when} należy do zestawu "
+                "warunków, których nie da się spełnić jednocześnie. Konflikt obejmuje także "
+                "dokładny wymiar godzin, obsadę weekendów, 5 dni pracy, stałe nocki oraz odpoczynki. "
+                "To nie znaczy, że niedostępność jest błędna — jeśli musi zostać, zmień obsadę "
+                "weekendu lub rozkład godzin innej osoby."
+                + weekend_hint
+                + (f" Dotyczy dat: {dates_text}." if dates_text else ""),
+                educator_id=item.educator_id,
+                context={
+                    "unavailabilityId": item.id,
+                    "groupId": member_group_ids[0] if member_group_ids else None,
+                    "scope": item.scope,
+                    "dayOfWeek": item.day_of_week,
+                    "weekNumber": item.week_number,
+                    "date": item.date.isoformat() if item.date else None,
+                    "startTime": item.start_time,
+                    "endTime": item.end_time,
+                    "affectedDates": [value.isoformat() for value in affected],
+                    "weekendReview": weekend_review,
+                    "conflictType": "HARD_UNAVAILABILITY_CONFLICT_SET",
+                    "conflictSetSize": conflict_set_size,
+                },
+            ))
         return result
 
     morning_expression, morning_bound = morning_balance_cost(model, x, memberships, educator_index, total_weeks, step)
@@ -759,7 +874,7 @@ def solve_internat_schedule(
             assignments=_canonical_merge(assignments),
             solver_status_name=solver.status_name(status),
             optimization_proven=False,
-            conflict_messages=off_conflicts(solver) if status == cp_model.INFEASIBLE else None,
+            conflict_messages=hard_conflicts(solver) if status == cp_model.INFEASIBLE else None,
         )
 
     preferred_terms: list[cp_model.IntVar] = []
@@ -903,7 +1018,7 @@ def solve_internat_schedule(
             assignments=[],
             solver_status_name=feasibility_solver.status_name(feasibility_status),
             stage_values={},
-            conflict_messages=off_conflicts(feasibility_solver),
+            conflict_messages=hard_conflicts(feasibility_solver),
         )
     if feasibility_status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return InternatSolverResult(

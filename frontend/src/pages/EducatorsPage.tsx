@@ -74,6 +74,9 @@ export function EducatorsPage() {
   if (!configuration || !activeGroup) return <EmptyState>Najpierw utwórz konfigurację.</EmptyState>;
   const educatorById = new Map(configuration.educators.map((item) => [item.id, item]));
   const memberIds = new Set(memberships.map((item) => item.educatorId));
+  const groupUnavailability = configuration.unavailability.filter((item) =>
+    memberIds.has(item.educatorId),
+  );
   const available = configuration.educators.filter(
     (item) => item.active && !memberIds.has(item.id),
   );
@@ -533,14 +536,21 @@ export function EducatorsPage() {
       <section className="section-block" id="dostepnosc">
         <div className="section-heading"><div><span className="eyebrow">KIEDY NIE MOŻE PRACOWAĆ</span><h2>Niedostępność wychowawcy</h2></div></div>
         <div className="inline-form">
-          <label>Wychowawca<select value={unavailable.educatorId} onChange={(event) => setUnavailable({ ...unavailable, educatorId: event.target.value })}><option value="">Wybierz</option>{configuration.educators.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
+          <label>Wychowawca<select value={unavailable.educatorId} onChange={(event) => setUnavailable({ ...unavailable, educatorId: event.target.value })}><option value="">Wybierz</option>{memberships.map((membership) => educatorById.get(membership.educatorId)).filter((item) => item !== undefined).map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
           <label>Rodzaj<select value={unavailable.type} onChange={(event) => setUnavailable({ ...unavailable, type: event.target.value as "HARD" | "PREFERRED" })}><option value="HARD">Nie może pracować</option><option value="PREFERRED">Woli nie pracować</option></select></label>
           <label>Dzień<select value={unavailable.dayOfWeek} onChange={(event) => setUnavailable({ ...unavailable, dayOfWeek: Number(event.target.value) })}>{["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Niedz"].map((name, index) => <option key={name} value={index}>{name}</option>)}</select></label>
           <label>Od<input type="time" step="1800" value={unavailable.startTime} onChange={(event) => setUnavailable({ ...unavailable, startTime: event.target.value })} /></label>
           <label>Do<input type="time" step="1800" value={unavailable.endTime} onChange={(event) => setUnavailable({ ...unavailable, endTime: event.target.value })} /></label>
           <button className="button button--secondary" type="button" onClick={addUnavailability}>Dodaj</button>
         </div>
-        <div className="record-list">{configuration.unavailability.map((item) => <div className="record-row" key={item.id}><span>{educatorById.get(item.educatorId)?.shortCode}</span><strong>{item.type === "HARD" ? "Nie może pracować" : "Woli nie pracować"} · {item.startTime}–{item.endTime}</strong><button className="icon-button" type="button" onClick={() => setConfiguration({ ...configuration, unavailability: configuration.unavailability.filter((value) => value.id !== item.id) })}>×</button></div>)}</div>
+        <div className="record-list">{groupUnavailability.map((item) => <div className="record-row" id={`niedostepnosc-${encodeURIComponent(item.id)}`} key={item.id}>
+          <span>{educatorById.get(item.educatorId)?.shortCode}</span>
+          <div>
+            <strong>{educatorById.get(item.educatorId)?.displayName} · {item.type === "HARD" ? "bezwzględnie nie może pracować" : "woli nie pracować"}</strong>
+            <small>{item.scope === "RECURRING_WEEKLY" && typeof item.dayOfWeek === "number" ? `Co tydzień: ${WEEKDAY_NAMES[item.dayOfWeek]}` : item.date ?? `Tydzień ${item.weekNumber}`} · {item.startTime}–{item.endTime}</small>
+          </div>
+          <button className="icon-button" aria-label={`Usuń niedostępność ${educatorById.get(item.educatorId)?.displayName ?? "wychowawcy"}`} type="button" onClick={() => setConfiguration({ ...configuration, unavailability: configuration.unavailability.filter((value) => value.id !== item.id) })}>×</button>
+        </div>)}</div>
       </section>
 
       <section className="section-block" id="nocki">
